@@ -103,14 +103,12 @@ const ResumeAuditInteractive = () => {
     setApiError('');
 
     try {
-      // ✅ Build FormData (this will become multipart/form-data automatically)
       const formData = new FormData();
 
-      // ✅ Resume file (server will extract text correctly)
       if (!selectedFile) throw new Error('Please upload your resume (PDF/DOCX).');
       formData.append('resumeFile', selectedFile);
 
-      // ✅ Job description: prefer textarea; if empty, allow file (txt)
+      // Job description: prefer textarea; if empty, allow file (txt)
       let jobDescriptionText = jobDescription.trim();
       if (!jobDescriptionText && jobDescriptionFile) {
         jobDescriptionText = (await extractTextFromFile(jobDescriptionFile)).trim();
@@ -122,25 +120,34 @@ const ResumeAuditInteractive = () => {
       if (region) formData.append('region', region);
       if (jobType) formData.append('experienceLevel', jobType);
 
-      // ✅ IMPORTANT: do NOT set Content-Type header yourself for FormData
       const response = await fetch('/api/resume-audit', {
         method: 'POST',
         body: formData,
       });
 
-      let data: any;
+      // ✅ Robust parsing: read text first, then try JSON
+      const rawText = await response.text();
+      let data: any = null;
       try {
-        data = await response.json();
+        data = rawText ? JSON.parse(rawText) : null;
       } catch {
-        data = null;
+        data = null; // HTML / empty / non-JSON
       }
 
       if (!response.ok) {
         const serverMessage =
-          data && typeof data.error === 'string'
-            ? data.error
-            : `Server error: ${response.status}`;
+          (data && typeof data.error === 'string' && data.error) ||
+          (rawText && rawText.slice(0, 300)) ||
+          `Server error: ${response.status}`;
         throw new Error(serverMessage);
+      }
+
+      // ✅ Validate expected shape (prevents "nothing happens")
+      if (!data || typeof data.resumeMindScore !== 'number' || typeof data.atsCompatibility !== 'number') {
+        throw new Error(
+          (data && typeof data.error === 'string' && data.error) ||
+            'Resume audit API did not return expected JSON. Please redeploy and try again.'
+        );
       }
 
       setAuditResults(data as AuditResultsData);
