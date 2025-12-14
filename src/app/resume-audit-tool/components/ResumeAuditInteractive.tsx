@@ -91,7 +91,6 @@ const ResumeAuditInteractive = () => {
     return !Object.values(newErrors).some((error) => error !== '');
   };
 
-  // NOTE: For JD .txt uploads only; resume should NEVER be read as text in browser.
   const extractTextFromFile = async (file: File): Promise<string> => {
     return await file.text();
   };
@@ -108,7 +107,6 @@ const ResumeAuditInteractive = () => {
       if (!selectedFile) throw new Error('Please upload your resume (PDF/DOCX).');
       formData.append('resumeFile', selectedFile);
 
-      // Job description: prefer textarea; if empty, allow file (txt)
       let jobDescriptionText = jobDescription.trim();
       if (!jobDescriptionText && jobDescriptionFile) {
         jobDescriptionText = (await extractTextFromFile(jobDescriptionFile)).trim();
@@ -125,46 +123,45 @@ const ResumeAuditInteractive = () => {
         body: formData,
       });
 
-      // ✅ Robust parsing: read text first, then try JSON
+      // ✅ SAFE parsing: do not call response.json() directly
       const rawText = await response.text();
       let data: any = null;
+
       try {
         data = rawText ? JSON.parse(rawText) : null;
       } catch {
-        data = null; // HTML / empty / non-JSON
+        data = null;
       }
 
       if (!response.ok) {
-        const serverMessage =
+        const msg =
           (data && typeof data.error === 'string' && data.error) ||
-          (rawText && rawText.slice(0, 300)) ||
-          `Server error: ${response.status}`;
-        throw new Error(serverMessage);
+          (rawText ? rawText.slice(0, 250) : `Server error: ${response.status}`);
+        throw new Error(msg);
       }
 
-      // ✅ Validate expected shape (prevents "nothing happens")
-      if (!data || typeof data.resumeMindScore !== 'number' || typeof data.atsCompatibility !== 'number') {
+      // If backend is still in "route alive" mode, show a friendly message
+      if (data?.ok === true && data?.received) {
         throw new Error(
-          (data && typeof data.error === 'string' && data.error) ||
-            'Resume audit API did not return expected JSON. Please redeploy and try again.'
+          'Backend is responding, but resume audit logic is not enabled yet. Next step is to add extraction + OpenAI back.'
         );
+      }
+
+      // Expect full audit response shape
+      if (!data || typeof data.resumeMindScore !== 'number') {
+        throw new Error('Resume audit API did not return expected JSON result.');
       }
 
       setAuditResults(data as AuditResultsData);
     } catch (err: any) {
       console.error('Error analyzing resume:', err);
-      const message =
-        typeof err?.message === 'string'
-          ? err.message
-          : 'Something went wrong while analyzing your resume. Please try again.';
-      setApiError(message);
+      setApiError(typeof err?.message === 'string' ? err.message : 'Something went wrong.');
     } finally {
       setIsAnalyzing(false);
     }
   };
 
   const handleExportPDF = () => {
-    console.log('Exporting audit results as PDF...');
     alert('PDF export functionality will be implemented. Your audit report would be downloaded.');
   };
 
@@ -238,11 +235,7 @@ const ResumeAuditInteractive = () => {
             </div>
 
             <div className="bg-surface rounded-xl border border-border p-6 space-y-6">
-              <FileUploadZone
-                onFileSelect={setSelectedFile}
-                selectedFile={selectedFile}
-                error={errors.file}
-              />
+              <FileUploadZone onFileSelect={setSelectedFile} selectedFile={selectedFile} error={errors.file} />
 
               <JobDescriptionInput
                 value={jobDescription}
@@ -261,10 +254,7 @@ const ResumeAuditInteractive = () => {
                 onCompanyNameChange={setCompanyName}
                 onRegionChange={setRegion}
                 onJobTypeChange={setJobType}
-                errors={{
-                  targetRole: errors.targetRole,
-                  companyName: errors.companyName,
-                }}
+                errors={{ targetRole: errors.targetRole, companyName: errors.companyName }}
               />
 
               <div className="pt-4 border-t border-border">
@@ -278,40 +268,9 @@ const ResumeAuditInteractive = () => {
                 </button>
               </div>
             </div>
-
-            <div className="bg-accent/5 border border-accent/20 rounded-xl p-6">
-              <div className="flex items-start space-x-3">
-                <Icon name="InformationCircleIcon" size={24} className="text-accent flex-shrink-0 mt-1" />
-                <div className="space-y-2">
-                  <h3 className="font-semibold text-foreground">What You'll Get</h3>
-                  <ul className="space-y-1.5 text-sm text-text-secondary">
-                    <li className="flex items-start space-x-2">
-                      <span className="text-accent mt-1">•</span>
-                      <span>Comprehensive ResumeMind Score<sup>TM</sup> (0-100) based on industry standards</span>
-                    </li>
-                    <li className="flex items-start space-x-2">
-                      <span className="text-accent mt-1">•</span>
-                      <span>Detailed ATS compatibility analysis with specific recommendations</span>
-                    </li>
-                    <li className="flex items-start space-x-2">
-                      <span className="text-accent mt-1">•</span>
-                      <span>Identified strengths and areas for improvement with priority levels</span>
-                    </li>
-                    <li className="flex items-start space-x-2">
-                      <span className="text-accent mt-1">•</span>
-                      <span>Actionable suggestions to optimize your resume for the target role</span>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </div>
           </>
         ) : (
-          <AuditResults
-            results={auditResults}
-            onExportPDF={handleExportPDF}
-            onStartOver={handleStartOver}
-          />
+          <AuditResults results={auditResults} onExportPDF={handleExportPDF} onStartOver={handleStartOver} />
         )}
       </div>
     </>
