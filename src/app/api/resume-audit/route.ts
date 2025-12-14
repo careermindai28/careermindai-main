@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import mammoth from "mammoth";
 import { openai, DEFAULT_MODEL } from "@/lib/openaiClient";
+import { getFirestore, getStorageBucket } from "@/lib/firebaseAdmin";
+import crypto from "crypto";
 
 export const runtime = "nodejs";
 
@@ -73,7 +75,7 @@ async function extractFromDocx(buffer: Buffer) {
   return result?.value ?? "";
 }
 
-// ✅ pdf-parse ESM-safe (fixes “no default export”)
+// ✅ pdf-parse ESM-safe
 async function extractFromPdf(buffer: Buffer) {
   const mod: any = await import("pdf-parse");
   const parse = mod?.default ?? mod;
@@ -124,11 +126,19 @@ function toUI(parsed: OpenAIResumeAuditResponse) {
   };
 }
 
+function getOrCreateGuestSessionId(req: NextRequest) {
+  const existing = req.cookies.get("guestSessionId")?.value;
+  if (existing && existing.length > 10) return existing;
+  return crypto.randomUUID();
+}
+
 export async function GET() {
   return NextResponse.json({ ok: true, route: "/api/resume-audit" }, { status: 200 });
 }
 
 export async function POST(req: NextRequest) {
+  const guestSessionId = getOrCreateGuestSessionId(req);
+
   try {
     const ct = req.headers.get("content-type") || "";
     if (!ct.includes("multipart/form-data")) {
@@ -166,8 +176,8 @@ export async function POST(req: NextRequest) {
     const resumeText = assertReadable(extracted);
 
     const systemPrompt = `You are an expert resume analyzer. Return ONLY valid JSON (single object).`;
-
     let userPrompt = `RESUME TEXT:\n${resumeText}`;
+
     if (fields.jobDescription) userPrompt += `\n\nJOB DESCRIPTION:\n${fields.jobDescription}`;
     if (fields.targetRole) userPrompt += `\n\nTARGET ROLE:\n${fields.targetRole}`;
     if (fields.companyName) userPrompt += `\n\nCOMPANY:\n${fields.companyName}`;
@@ -222,7 +232,61 @@ Return ONLY JSON:
     parsed.subscores.formattingScore = clamp(parsed.subscores.formattingScore);
     parsed.subscores.impactScore = clamp(parsed.subscores.impactScore);
 
-    return NextResponse.json(toUI(parsed), { status: 200 });
+    const ui = toUI(parsed);
+
+    // ✅ Save to Firestore + Storage
+    const db = getFirestore();
+    const auditId = crypto.randomUUID();
+
+    let storagePath: string | null = null;
+    try {
+      const bucket = getStorageBucket();
+      storagePath = `audits/${guestSessionId}/${auditId}/${file.name}`;
+      await bucket.file(storagePath).save(buf, {
+        contentType: file.type || "application/octet-stream",
+        resumable: false,
+        metadata: { cacheControl: "private, max-age=0, no-transform" },
+      });
+    } catch {
+      // Storage upload is optional; audit still works without it
+      storagePath = null;
+    }
+
+    await db.collection("audits").doc(auditId).set({
+      auditId,
+      ownerType: "guest",
+      ownerId: guestSessionId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      fileMeta: {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        storagePath,
+      },
+      inputs: fields,
+      resumeText, // used by builder later
+      auditResult: ui,
+    });
+
+    const res = NextResponse.json(
+      {
+        auditId,
+        ...ui,
+      },
+      { status: 200 }
+    );
+
+    // set/refresh guest session cookie
+    res.cookies.set("guestSessionId", guestSessionId, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+    });
+
+    return res;
   } catch (e: any) {
     const msg = typeof e?.message === "string" ? e.message : "Resume audit failed.";
     return jsonError(msg, 500);

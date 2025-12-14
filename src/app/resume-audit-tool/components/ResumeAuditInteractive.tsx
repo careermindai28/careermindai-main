@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import FileUploadZone from './FileUploadZone';
 import JobDescriptionInput from './JobDescriptionInput';
 import AuditFormFields from './AuditFormFields';
@@ -34,6 +35,7 @@ interface ATSRecommendation {
 }
 
 interface AuditResultsData {
+  auditId?: string; // ✅ added
   resumeMindScore: number;
   strengths: Strength[];
   improvements: Improvement[];
@@ -47,6 +49,8 @@ interface AuditResultsData {
 }
 
 const ResumeAuditInteractive = () => {
+  const router = useRouter();
+
   const [isHydrated, setIsHydrated] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
@@ -123,10 +127,8 @@ const ResumeAuditInteractive = () => {
         body: formData,
       });
 
-      // ✅ SAFE parsing: do not call response.json() directly
       const rawText = await response.text();
       let data: any = null;
-
       try {
         data = rawText ? JSON.parse(rawText) : null;
       } catch {
@@ -140,16 +142,11 @@ const ResumeAuditInteractive = () => {
         throw new Error(msg);
       }
 
-      // If backend is still in "route alive" mode, show a friendly message
-      if (data?.ok === true && data?.received) {
+      if (!data || typeof data.resumeMindScore !== 'number' || typeof data.atsCompatibility !== 'number') {
         throw new Error(
-          'Backend is responding, but resume audit logic is not enabled yet. Next step is to add extraction + OpenAI back.'
+          (data && typeof data.error === 'string' && data.error) ||
+            'Resume audit API did not return expected JSON result.'
         );
-      }
-
-      // Expect full audit response shape
-      if (!data || typeof data.resumeMindScore !== 'number') {
-        throw new Error('Resume audit API did not return expected JSON result.');
       }
 
       setAuditResults(data as AuditResultsData);
@@ -184,6 +181,15 @@ const ResumeAuditInteractive = () => {
     setApiError('');
   };
 
+  const handleBuildResume = () => {
+    const auditId = auditResults?.auditId;
+    if (!auditId) {
+      setApiError('Audit ID missing. Please re-run Resume Audit once.');
+      return;
+    }
+    router.push(`/ai-resume-builder?auditId=${encodeURIComponent(auditId)}`);
+  };
+
   if (!isHydrated) {
     return (
       <div className="min-h-screen bg-background">
@@ -216,23 +222,6 @@ const ResumeAuditInteractive = () => {
                 </div>
               </div>
             )}
-
-            <div className="bg-gradient-to-r from-primary/10 to-accent/10 rounded-xl p-6 border border-primary/20">
-              <div className="flex items-start space-x-4">
-                <div className="w-12 h-12 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
-                  <Icon name="SparklesIcon" size={24} className="text-primary" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-semibold text-foreground mb-2">
-                    Get Your ResumeMind Score<sup>TM</sup>
-                  </h2>
-                  <p className="text-sm text-text-secondary">
-                    Upload your resume and job description to receive a comprehensive AI-powered
-                    audit with actionable insights to beat ATS systems and land more interviews.
-                  </p>
-                </div>
-              </div>
-            </div>
 
             <div className="bg-surface rounded-xl border border-border p-6 space-y-6">
               <FileUploadZone onFileSelect={setSelectedFile} selectedFile={selectedFile} error={errors.file} />
@@ -270,7 +259,19 @@ const ResumeAuditInteractive = () => {
             </div>
           </>
         ) : (
-          <AuditResults results={auditResults} onExportPDF={handleExportPDF} onStartOver={handleStartOver} />
+          <>
+            <AuditResults results={auditResults} onExportPDF={handleExportPDF} onStartOver={handleStartOver} />
+
+            <div className="flex flex-col sm:flex-row gap-3 justify-end">
+              <button
+                onClick={handleBuildResume}
+                className="w-full sm:w-auto px-8 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-all duration-150 shadow-card hover:shadow-elevation flex items-center justify-center space-x-2"
+              >
+                <Icon name="SparklesIcon" size={20} />
+                <span>Build AI Resume</span>
+              </button>
+            </div>
+          </>
         )}
       </div>
     </>
