@@ -128,7 +128,7 @@ export default function ResumeAuditInfoPage() {
                     <Icon name="ArrowRightIcon" size={20} className="ml-2" />
                   </Link>
                   <Link
-                    href="/landing-page#hero"
+                    href="/resume-audit-tool"
                     className="inline-flex items-center justify-center bg-surface hover:bg-muted text-foreground px-8 py-4 rounded-lg font-semibold border-2 border-border transition-all duration-150"
                   >
                     View Dashboard Demo
