@@ -39,17 +39,25 @@ interface AuditResultsData {
   improvements: Improvement[];
   atsCompatibility: number;
   atsRecommendations: ATSRecommendation[];
+  summary?: string;
+  recommendedKeywords?: string[];
+  riskFlags?: string[];
+  regionNotes?: string;
+  roleFitNotes?: string;
 }
 
 const ResumeAuditInteractive = () => {
   const [isHydrated, setIsHydrated] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
   const [jobDescription, setJobDescription] = useState('');
   const [jobDescriptionFile, setJobDescriptionFile] = useState<File | null>(null);
+
   const [targetRole, setTargetRole] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [region, setRegion] = useState('india');
   const [jobType, setJobType] = useState('full-time');
+
   const [errors, setErrors] = useState<FormErrors>({
     file: '',
     jobDescription: '',
@@ -57,6 +65,7 @@ const ResumeAuditInteractive = () => {
     targetRole: '',
     companyName: '',
   });
+
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [auditResults, setAuditResults] = useState<AuditResultsData | null>(null);
   const [apiError, setApiError] = useState<string>('');
@@ -74,64 +83,49 @@ const ResumeAuditInteractive = () => {
       companyName: '',
     };
 
-    if (!selectedFile) {
-      newErrors.file = 'Please upload your resume';
-    }
-
-    if (!targetRole.trim()) {
-      newErrors.targetRole = 'Target role is required';
-    }
-
-    if (!companyName.trim()) {
-      newErrors.companyName = 'Company name is required';
-    }
+    if (!selectedFile) newErrors.file = 'Please upload your resume';
+    if (!targetRole.trim()) newErrors.targetRole = 'Target role is required';
+    if (!companyName.trim()) newErrors.companyName = 'Company name is required';
 
     setErrors(newErrors);
     return !Object.values(newErrors).some((error) => error !== '');
   };
 
+  // NOTE: For JD .txt uploads only; resume should NEVER be read as text in browser.
   const extractTextFromFile = async (file: File): Promise<string> => {
     return await file.text();
   };
 
   const handleAnalyze = async () => {
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     setIsAnalyzing(true);
     setApiError('');
 
     try {
-      // Extract resume text from file
-      let resumeText = '';
-      if (selectedFile) {
-        resumeText = await extractTextFromFile(selectedFile);
-      }
+      // ✅ Build FormData (this will become multipart/form-data automatically)
+      const formData = new FormData();
 
-      // Extract job description (prefer textarea, fall back to file)
-      let jobDescriptionText = jobDescription;
+      // ✅ Resume file (server will extract text correctly)
+      if (!selectedFile) throw new Error('Please upload your resume (PDF/DOCX).');
+      formData.append('resumeFile', selectedFile);
+
+      // ✅ Job description: prefer textarea; if empty, allow file (txt)
+      let jobDescriptionText = jobDescription.trim();
       if (!jobDescriptionText && jobDescriptionFile) {
-        jobDescriptionText = await extractTextFromFile(jobDescriptionFile);
+        jobDescriptionText = (await extractTextFromFile(jobDescriptionFile)).trim();
       }
 
-      // Build the payload
-      const payload = {
-        resumeText,
-        jobDescription: jobDescriptionText || undefined,
-        targetRole,
-        companyName,
-        region,
-        experienceLevel: jobType,
-      };
+      if (jobDescriptionText) formData.append('jobDescription', jobDescriptionText);
+      if (targetRole.trim()) formData.append('targetRole', targetRole.trim());
+      if (companyName.trim()) formData.append('companyName', companyName.trim());
+      if (region) formData.append('region', region);
+      if (jobType) formData.append('experienceLevel', jobType);
 
-      // Call the API with improved error handling
+      // ✅ IMPORTANT: do NOT set Content-Type header yourself for FormData
       const response = await fetch('/api/resume-audit', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+        body: formData,
       });
 
       let data: any;
@@ -149,7 +143,6 @@ const ResumeAuditInteractive = () => {
         throw new Error(serverMessage);
       }
 
-      // At this point, data should be the ResumeAuditResult JSON
       setAuditResults(data as AuditResultsData);
     } catch (err: any) {
       console.error('Error analyzing resume:', err);
