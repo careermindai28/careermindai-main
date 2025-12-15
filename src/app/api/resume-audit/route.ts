@@ -132,10 +132,6 @@ function getOrCreateGuestSessionId(req: NextRequest) {
   return crypto.randomUUID();
 }
 
-export async function GET() {
-  return NextResponse.json({ ok: true, route: "/api/resume-audit" }, { status: 200 });
-}
-
 export async function POST(req: NextRequest) {
   const guestSessionId = getOrCreateGuestSessionId(req);
 
@@ -219,7 +215,6 @@ Return ONLY JSON:
       return jsonError("AI returned invalid JSON. Please try again.", 500);
     }
 
-    // clamp scores
     parsed.overallScore = clamp(parsed.overallScore);
     parsed.subscores = parsed.subscores || {
       atsScore: 0,
@@ -234,7 +229,7 @@ Return ONLY JSON:
 
     const ui = toUI(parsed);
 
-    // ✅ Save to Firestore + Storage
+    // ✅ Save to Firestore (+ optional Storage)
     const db = getFirestore();
     const auditId = crypto.randomUUID();
 
@@ -248,7 +243,6 @@ Return ONLY JSON:
         metadata: { cacheControl: "private, max-age=0, no-transform" },
       });
     } catch {
-      // Storage upload is optional; audit still works without it
       storagePath = null;
     }
 
@@ -258,26 +252,14 @@ Return ONLY JSON:
       ownerId: guestSessionId,
       createdAt: new Date(),
       updatedAt: new Date(),
-      fileMeta: {
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        storagePath,
-      },
+      fileMeta: { name: file.name, type: file.type, size: file.size, storagePath },
       inputs: fields,
-      resumeText, // used by builder later
+      resumeText,
       auditResult: ui,
     });
 
-    const res = NextResponse.json(
-      {
-        auditId,
-        ...ui,
-      },
-      { status: 200 }
-    );
+    const res = NextResponse.json({ auditId, ...ui }, { status: 200 });
 
-    // set/refresh guest session cookie
     res.cookies.set("guestSessionId", guestSessionId, {
       httpOnly: true,
       secure: true,

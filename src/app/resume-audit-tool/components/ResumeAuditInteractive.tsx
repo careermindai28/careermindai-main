@@ -35,7 +35,7 @@ interface ATSRecommendation {
 }
 
 interface AuditResultsData {
-  auditId?: string; // ✅ added
+  auditId?: string;
   resumeMindScore: number;
   strengths: Strength[];
   improvements: Improvement[];
@@ -88,6 +88,8 @@ const ResumeAuditInteractive = () => {
     };
 
     if (!selectedFile) newErrors.file = 'Please upload your resume';
+    // keep your original validations; no redesign
+    // if you want these optional later, we can relax.
     if (!targetRole.trim()) newErrors.targetRole = 'Target role is required';
     if (!companyName.trim()) newErrors.companyName = 'Company name is required';
 
@@ -107,7 +109,6 @@ const ResumeAuditInteractive = () => {
 
     try {
       const formData = new FormData();
-
       if (!selectedFile) throw new Error('Please upload your resume (PDF/DOCX).');
       formData.append('resumeFile', selectedFile);
 
@@ -143,10 +144,7 @@ const ResumeAuditInteractive = () => {
       }
 
       if (!data || typeof data.resumeMindScore !== 'number' || typeof data.atsCompatibility !== 'number') {
-        throw new Error(
-          (data && typeof data.error === 'string' && data.error) ||
-            'Resume audit API did not return expected JSON result.'
-        );
+        throw new Error('Resume audit API did not return expected JSON result.');
       }
 
       setAuditResults(data as AuditResultsData);
@@ -184,7 +182,7 @@ const ResumeAuditInteractive = () => {
   const handleBuildResume = () => {
     const auditId = auditResults?.auditId;
     if (!auditId) {
-      setApiError('Audit ID missing. Please re-run Resume Audit once.');
+      setApiError('auditId missing from API. Deploy the updated resume-audit route.ts and re-run audit once.');
       return;
     }
     router.push(`/ai-resume-builder?auditId=${encodeURIComponent(auditId)}`);
@@ -208,69 +206,75 @@ const ResumeAuditInteractive = () => {
     <>
       <LoadingState isVisible={isAnalyzing} />
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {!auditResults ? (
-          <>
-            {apiError && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
-                <div className="flex items-start space-x-3">
-                  <Icon name="ExclamationTriangleIcon" size={24} className="text-red-500 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <h3 className="font-semibold text-red-500 mb-1">Error</h3>
-                    <p className="text-sm text-red-400">{apiError}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="bg-surface rounded-xl border border-border p-6 space-y-6">
-              <FileUploadZone onFileSelect={setSelectedFile} selectedFile={selectedFile} error={errors.file} />
-
-              <JobDescriptionInput
-                value={jobDescription}
-                onChange={setJobDescription}
-                onFileSelect={setJobDescriptionFile}
-                selectedFile={jobDescriptionFile}
-                error={errors.jobDescription}
-              />
-
-              <AuditFormFields
-                targetRole={targetRole}
-                companyName={companyName}
-                region={region}
-                jobType={jobType}
-                onTargetRoleChange={setTargetRole}
-                onCompanyNameChange={setCompanyName}
-                onRegionChange={setRegion}
-                onJobTypeChange={setJobType}
-                errors={{ targetRole: errors.targetRole, companyName: errors.companyName }}
-              />
-
-              <div className="pt-4 border-t border-border">
-                <button
-                  onClick={handleAnalyze}
-                  disabled={isAnalyzing}
-                  className="w-full sm:w-auto px-8 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-all duration-150 shadow-card hover:shadow-elevation flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Icon name="DocumentMagnifyingGlassIcon" size={20} />
-                  <span>{isAnalyzing ? 'Analyzing...' : 'Analyze Resume'}</span>
-                </button>
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        {apiError && (
+          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
+            <div className="flex items-start space-x-3">
+              <Icon name="ExclamationTriangleIcon" size={24} className="text-red-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="font-semibold text-red-500 mb-1">Error</h3>
+                <p className="text-sm text-red-400">{apiError}</p>
               </div>
             </div>
-          </>
-        ) : (
-          <>
-            <AuditResults results={auditResults} onExportPDF={handleExportPDF} onStartOver={handleStartOver} />
+          </div>
+        )}
 
-            <div className="flex flex-col sm:flex-row gap-3 justify-end">
+        {!auditResults ? (
+          <div className="bg-surface rounded-xl border border-border p-6 space-y-6">
+            <FileUploadZone onFileSelect={setSelectedFile} selectedFile={selectedFile} error={errors.file} />
+
+            <JobDescriptionInput
+              value={jobDescription}
+              onChange={setJobDescription}
+              onFileSelect={setJobDescriptionFile}
+              selectedFile={jobDescriptionFile}
+              error={errors.jobDescription}
+            />
+
+            <AuditFormFields
+              targetRole={targetRole}
+              companyName={companyName}
+              region={region}
+              jobType={jobType}
+              onTargetRoleChange={setTargetRole}
+              onCompanyNameChange={setCompanyName}
+              onRegionChange={setRegion}
+              onJobTypeChange={setJobType}
+              errors={{ targetRole: errors.targetRole, companyName: errors.companyName }}
+            />
+
+            <div className="pt-4 border-t border-border">
               <button
-                onClick={handleBuildResume}
-                className="w-full sm:w-auto px-8 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-all duration-150 shadow-card hover:shadow-elevation flex items-center justify-center space-x-2"
+                onClick={handleAnalyze}
+                disabled={isAnalyzing}
+                className="w-full sm:w-auto px-8 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-all duration-150 shadow-card hover:shadow-elevation flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Icon name="SparklesIcon" size={20} />
-                <span>Build AI Resume</span>
+                <Icon name="DocumentMagnifyingGlassIcon" size={20} />
+                <span>{isAnalyzing ? 'Analyzing...' : 'Analyze Resume'}</span>
               </button>
             </div>
+          </div>
+        ) : (
+          <>
+            {/* ✅ “Next step” panel so the button is visible */}
+            <div className="bg-surface rounded-xl border border-border p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <div className="text-sm text-text-secondary">Next step</div>
+                <div className="text-base font-semibold text-foreground">Generate your AI Resume using this Audit</div>
+                <div className="text-xs text-text-secondary break-all mt-1">
+                  Audit ID: {auditResults.auditId || '(missing)'}
+                </div>
+              </div>
+              <button
+                onClick={handleBuildResume}
+                disabled={!auditResults.auditId}
+                className="w-full sm:w-auto px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Build AI Resume
+              </button>
+            </div>
+
+            <AuditResults results={auditResults} onExportPDF={handleExportPDF} onStartOver={handleStartOver} />
           </>
         )}
       </div>
