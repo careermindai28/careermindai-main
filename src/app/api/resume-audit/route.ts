@@ -91,7 +91,9 @@ function clamp(n: any) {
 
 function toUI(parsed: OpenAIResumeAuditResponse) {
   const strengths = Array.isArray(parsed?.strengths) ? parsed.strengths : [];
-  const improvements = Array.isArray(parsed?.improvements) ? parsed.improvements : [];
+  const improvements = Array.isArray(parsed?.improvements)
+    ? parsed.improvements
+    : [];
   const sectionFeedback = Array.isArray(parsed?.sectionFeedback)
     ? parsed.sectionFeedback
     : [];
@@ -115,7 +117,10 @@ function toUI(parsed: OpenAIResumeAuditResponse) {
     atsRecommendations: sectionFeedback.slice(0, 5).map((s, i) => ({
       title: String(s?.section ?? `Section ${i + 1}`),
       description: Array.isArray(s?.comments) ? s.comments.join(" ") : "",
-      impact: (i < 2 ? "high" : i < 4 ? "medium" : "low") as "high" | "medium" | "low",
+      impact: (i < 2 ? "high" : i < 4 ? "medium" : "low") as
+        | "high"
+        | "medium"
+        | "low",
     })),
     recommendedKeywords: Array.isArray(parsed?.recommendedKeywords)
       ? parsed.recommendedKeywords
@@ -130,6 +135,21 @@ function getOrCreateGuestSessionId(req: NextRequest) {
   const existing = req.cookies.get("guestSessionId")?.value;
   if (existing && existing.length > 10) return existing;
   return crypto.randomUUID();
+}
+
+/**
+ * Firestore cannot store undefined values.
+ * Also helpful to normalize empty strings to undefined (optional fields).
+ */
+function stripUndefined<T extends Record<string, any>>(obj: T): Partial<T> {
+  const entries = Object.entries(obj).filter(([, v]) => v !== undefined);
+  return Object.fromEntries(entries) as Partial<T>;
+}
+
+function emptyToUndefined(v: FormDataEntryValue | null): string | undefined {
+  if (typeof v !== "string") return undefined;
+  const s = v.trim();
+  return s.length ? s : undefined;
 }
 
 export async function POST(req: NextRequest) {
@@ -148,11 +168,11 @@ export async function POST(req: NextRequest) {
     if (!file) return jsonError("resumeFile is missing in FormData.", 400);
 
     const fields: Fields = {
-      jobDescription: (form.get("jobDescription") as string) || undefined,
-      targetRole: (form.get("targetRole") as string) || undefined,
-      companyName: (form.get("companyName") as string) || undefined,
-      region: (form.get("region") as string) || undefined,
-      experienceLevel: (form.get("experienceLevel") as string) || undefined,
+      jobDescription: emptyToUndefined(form.get("jobDescription")),
+      targetRole: emptyToUndefined(form.get("targetRole")),
+      companyName: emptyToUndefined(form.get("companyName")),
+      region: emptyToUndefined(form.get("region")),
+      experienceLevel: emptyToUndefined(form.get("experienceLevel")),
     };
 
     const buf = Buffer.from(await file.arrayBuffer());
@@ -160,14 +180,17 @@ export async function POST(req: NextRequest) {
     const type = (file.type || "").toLowerCase();
 
     let extracted = "";
-    if (type.includes("pdf") || name.endsWith(".pdf")) extracted = await extractFromPdf(buf);
-    else if (
+    if (type.includes("pdf") || name.endsWith(".pdf")) {
+      extracted = await extractFromPdf(buf);
+    } else if (
       type.includes("word") ||
       type.includes("officedocument") ||
       name.endsWith(".docx")
-    )
+    ) {
       extracted = await extractFromDocx(buf);
-    else return jsonError("Unsupported file type. Upload PDF or DOCX.", 400);
+    } else {
+      return jsonError("Unsupported file type. Upload PDF or DOCX.", 400);
+    }
 
     const resumeText = assertReadable(extracted);
 
@@ -243,8 +266,10 @@ Return ONLY JSON:
         metadata: { cacheControl: "private, max-age=0, no-transform" },
       });
     } catch {
-      storagePath = null;
+      storagePath = null; // storage is optional; audit still completes
     }
+
+    const safeInputs = stripUndefined(fields);
 
     await db.collection("audits").doc(auditId).set({
       auditId,
@@ -252,8 +277,13 @@ Return ONLY JSON:
       ownerId: guestSessionId,
       createdAt: new Date(),
       updatedAt: new Date(),
-      fileMeta: { name: file.name, type: file.type, size: file.size, storagePath },
-      inputs: fields,
+      fileMeta: {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        storagePath,
+      },
+      inputs: safeInputs, // ✅ never contains undefined
       resumeText,
       auditResult: ui,
     });
@@ -270,7 +300,8 @@ Return ONLY JSON:
 
     return res;
   } catch (e: any) {
-    const msg = typeof e?.message === "string" ? e.message : "Resume audit failed.";
+    const msg =
+      typeof e?.message === "string" ? e.message : "Resume audit failed.";
     return jsonError(msg, 500);
   }
 }
