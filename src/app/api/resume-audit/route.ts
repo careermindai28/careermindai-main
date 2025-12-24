@@ -1,16 +1,3 @@
-// ---- Polyfills for pdf-parse / pdf.js in Node (Vercel) ----
-if (typeof globalThis.DOMMatrix === "undefined") {
-  // Minimal DOMMatrix polyfill (pdf-parse safe)
-  class DOMMatrix {
-    a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
-    constructor() {}
-  }
-  // @ts-ignore
-  globalThis.DOMMatrix = DOMMatrix;
-}
-
-
-
 import { NextRequest, NextResponse } from "next/server";
 import mammoth from "mammoth";
 import { openai, DEFAULT_MODEL } from "@/lib/openaiClient";
