@@ -8,7 +8,6 @@ import JobDescriptionInput from './JobDescriptionInput';
 import AuditFormFields from './AuditFormFields';
 import LoadingState from './LoadingState';
 import AuditResults from './AuditResults';
-import Icon from '@/components/ui/AppIcon';
 
 interface FormErrors {
   file: string;
@@ -22,11 +21,13 @@ interface Strength {
   title: string;
   description: string;
 }
+
 interface Improvement {
   title: string;
   description: string;
   priority: 'high' | 'medium' | 'low';
 }
+
 interface ATSRecommendation {
   title: string;
   description: string;
@@ -34,7 +35,6 @@ interface ATSRecommendation {
 }
 
 interface AuditResultsData {
-  // support both cases
   auditId?: string;
   audit_id?: string;
 
@@ -52,7 +52,7 @@ interface AuditResultsData {
   roleFitNotes?: string;
 }
 
-const ResumeAuditInteractive = () => {
+export default function ResumeAuditInteractive() {
   const router = useRouter();
 
   const [isHydrated, setIsHydrated] = useState(false);
@@ -76,13 +76,16 @@ const ResumeAuditInteractive = () => {
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [auditResults, setAuditResults] = useState<AuditResultsData | null>(null);
-  const [apiError, setApiError] = useState<string>('');
+  const [apiError, setApiError] = useState('');
 
-  useEffect(() => setIsHydrated(true), []);
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
-  const auditId = useMemo(() => {
-    return auditResults?.auditId || auditResults?.audit_id || '';
-  }, [auditResults]);
+  const auditId = useMemo(
+    () => auditResults?.auditId || auditResults?.audit_id || '',
+    [auditResults]
+  );
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {
@@ -95,16 +98,12 @@ const ResumeAuditInteractive = () => {
 
     if (!selectedFile) newErrors.file = 'Please upload your resume';
 
-    // keep as-is (if you want optional later, we can relax)
+    // Keep as required (as per your existing flow)
     if (!targetRole.trim()) newErrors.targetRole = 'Target role is required';
     if (!companyName.trim()) newErrors.companyName = 'Company name is required';
 
     setErrors(newErrors);
-    return !Object.values(newErrors).some((e) => e !== '');
-  };
-
-  const extractTextFromFile = async (file: File): Promise<string> => {
-    return await file.text();
+    return !Object.values(newErrors).some(Boolean);
   };
 
   const handleAnalyze = async () => {
@@ -116,56 +115,43 @@ const ResumeAuditInteractive = () => {
 
     try {
       const formData = new FormData();
-      if (!selectedFile) throw new Error('Please upload your resume (PDF/DOCX).');
+      if (!selectedFile) throw new Error('Resume file missing');
       formData.append('resumeFile', selectedFile);
 
-      let jobDescriptionText = jobDescription.trim();
-      if (!jobDescriptionText && jobDescriptionFile) {
-        jobDescriptionText = (await extractTextFromFile(jobDescriptionFile)).trim();
-      }
-
-      if (jobDescriptionText) formData.append('jobDescription', jobDescriptionText);
-      if (targetRole.trim()) formData.append('targetRole', targetRole.trim());
-      if (companyName.trim()) formData.append('companyName', companyName.trim());
+      if (jobDescription.trim()) formData.append('jobDescription', jobDescription);
+      if (targetRole.trim()) formData.append('targetRole', targetRole);
+      if (companyName.trim()) formData.append('companyName', companyName);
       if (region) formData.append('region', region);
       if (jobType) formData.append('experienceLevel', jobType);
 
-      const response = await fetch('/api/resume-audit', {
+      const res = await fetch('/api/resume-audit', {
         method: 'POST',
         body: formData,
       });
 
-      const rawText = await response.text();
-      let data: any = null;
-      try {
-        data = rawText ? JSON.parse(rawText) : null;
-      } catch {
-        data = null;
-      }
+      const data = await res.json();
 
-      if (!response.ok) {
-        const msg =
-          (data && typeof data.error === 'string' && data.error) ||
-          (rawText ? rawText.slice(0, 250) : `Server error: ${response.status}`);
-        throw new Error(msg);
-      }
+      if (!res.ok) throw new Error(data?.error || 'Audit failed');
 
-      // basic shape check
-      if (!data || typeof data.resumeMindScore !== 'number' || typeof data.atsCompatibility !== 'number') {
-        throw new Error('Resume audit API did not return expected JSON result.');
-      }
-
-      setAuditResults(data as AuditResultsData);
-    } catch (err: any) {
-      console.error('Error analyzing resume:', err);
-      setApiError(typeof err?.message === 'string' ? err.message : 'Something went wrong.');
+      setAuditResults(data);
+    } catch (e: any) {
+      setApiError(e?.message || 'Something went wrong');
     } finally {
       setIsAnalyzing(false);
     }
   };
 
+  const handleBuildResume = () => {
+    if (!auditId) {
+      setApiError('auditId missing from API response');
+      return;
+    }
+    router.push(`/ai-resume-builder?auditId=${encodeURIComponent(auditId)}`);
+  };
+
   const handleExportPDF = () => {
-    alert('PDF export coming soon.');
+    // keep existing behavior — you can wire export later
+    alert('PDF export will be enabled in the next phase.');
   };
 
   const handleStartOver = () => {
@@ -187,48 +173,21 @@ const ResumeAuditInteractive = () => {
     setApiError('');
   };
 
-  const handleBuildResume = () => {
-    const id = auditId;
-    if (!id) {
-      setApiError('auditId missing from API response. Open DevTools → Network → /api/resume-audit → Response and confirm it includes auditId.');
-      return;
-    }
-    router.push(`/ai-resume-builder?auditId=${encodeURIComponent(id)}`);
-  };
-
-  if (!isHydrated) {
-    return (
-      <div className="min-h-screen bg-background">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="animate-pulse space-y-6">
-            <div className="h-8 bg-muted rounded w-1/3"></div>
-            <div className="h-64 bg-muted rounded"></div>
-            <div className="h-48 bg-muted rounded"></div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  if (!isHydrated) return null;
 
   return (
     <>
       <LoadingState isVisible={isAnalyzing} />
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
         {apiError && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
-            <div className="flex items-start space-x-3">
-              <Icon name="ExclamationTriangleIcon" size={24} className="text-red-500 flex-shrink-0 mt-0.5" />
-              <div>
-                <h3 className="font-semibold text-red-500 mb-1">Error</h3>
-                <p className="text-sm text-red-400">{apiError}</p>
-              </div>
-            </div>
+          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 text-red-400">
+            {apiError}
           </div>
         )}
 
         {!auditResults ? (
-          <div className="bg-surface rounded-xl border border-border p-6 space-y-6">
+          <div className="bg-surface border border-border rounded-xl p-6 space-y-6">
             <FileUploadZone onFileSelect={setSelectedFile} selectedFile={selectedFile} error={errors.file} />
 
             <JobDescriptionInput
@@ -251,43 +210,38 @@ const ResumeAuditInteractive = () => {
               errors={{ targetRole: errors.targetRole, companyName: errors.companyName }}
             />
 
-            <div className="pt-4 border-t border-border">
-              <button
-                onClick={handleAnalyze}
-                disabled={isAnalyzing}
-                className="w-full sm:w-auto px-8 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-all duration-150 shadow-card hover:shadow-elevation flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Icon name="DocumentMagnifyingGlassIcon" size={20} />
-                <span>{isAnalyzing ? 'Analyzing...' : 'Analyze Resume'}</span>
-              </button>
-            </div>
+            <button
+              onClick={handleAnalyze}
+              className="px-8 py-3 bg-primary text-primary-foreground rounded-lg font-semibold"
+            >
+              Analyze Resume
+            </button>
           </div>
         ) : (
           <>
-            {/* ✅ This is what your PDF is missing — the Next Step CTA */}
-            <div className="bg-surface rounded-xl border border-border p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            {/* ✅ CTA to Resume Builder */}
+            <div className="bg-surface border border-border rounded-xl p-5 flex justify-between items-center">
               <div>
                 <div className="text-sm text-text-secondary">Next step</div>
-                <div className="text-base font-semibold text-foreground">Build AI Resume from this Audit</div>
-                <div className="text-xs text-text-secondary break-all mt-1">
-                  Audit ID: {auditId || '(missing)'}
-                </div>
+                <div className="font-semibold">Build AI Resume from this Audit</div>
+                <div className="text-xs text-text-secondary break-all">Audit ID: {auditId}</div>
               </div>
               <button
                 onClick={handleBuildResume}
-                disabled={!auditId}
-                className="w-full sm:w-auto px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold"
               >
                 Build AI Resume
               </button>
             </div>
 
-            <AuditResults results={auditResults} onExportPDF={handleExportPDF} onStartOver={handleStartOver} />
+            <AuditResults
+              results={auditResults}
+              onExportPDF={handleExportPDF}
+              onStartOver={handleStartOver}
+            />
           </>
         )}
       </div>
     </>
   );
-};
-
-export default ResumeAuditInteractive;
+}
