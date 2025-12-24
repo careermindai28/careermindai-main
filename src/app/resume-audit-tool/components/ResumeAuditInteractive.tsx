@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+
 import FileUploadZone from './FileUploadZone';
 import JobDescriptionInput from './JobDescriptionInput';
 import AuditFormFields from './AuditFormFields';
@@ -21,13 +22,11 @@ interface Strength {
   title: string;
   description: string;
 }
-
 interface Improvement {
   title: string;
   description: string;
   priority: 'high' | 'medium' | 'low';
 }
-
 interface ATSRecommendation {
   title: string;
   description: string;
@@ -35,13 +34,18 @@ interface ATSRecommendation {
 }
 
 interface AuditResultsData {
+  // support both cases
   auditId?: string;
+  audit_id?: string;
+
   resumeMindScore: number;
+  atsCompatibility: number;
+
+  summary?: string;
   strengths: Strength[];
   improvements: Improvement[];
-  atsCompatibility: number;
   atsRecommendations: ATSRecommendation[];
-  summary?: string;
+
   recommendedKeywords?: string[];
   riskFlags?: string[];
   regionNotes?: string;
@@ -74,9 +78,11 @@ const ResumeAuditInteractive = () => {
   const [auditResults, setAuditResults] = useState<AuditResultsData | null>(null);
   const [apiError, setApiError] = useState<string>('');
 
-  useEffect(() => {
-    setIsHydrated(true);
-  }, []);
+  useEffect(() => setIsHydrated(true), []);
+
+  const auditId = useMemo(() => {
+    return auditResults?.auditId || auditResults?.audit_id || '';
+  }, [auditResults]);
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {
@@ -88,13 +94,13 @@ const ResumeAuditInteractive = () => {
     };
 
     if (!selectedFile) newErrors.file = 'Please upload your resume';
-    // keep your original validations; no redesign
-    // if you want these optional later, we can relax.
+
+    // keep as-is (if you want optional later, we can relax)
     if (!targetRole.trim()) newErrors.targetRole = 'Target role is required';
     if (!companyName.trim()) newErrors.companyName = 'Company name is required';
 
     setErrors(newErrors);
-    return !Object.values(newErrors).some((error) => error !== '');
+    return !Object.values(newErrors).some((e) => e !== '');
   };
 
   const extractTextFromFile = async (file: File): Promise<string> => {
@@ -106,6 +112,7 @@ const ResumeAuditInteractive = () => {
 
     setIsAnalyzing(true);
     setApiError('');
+    setAuditResults(null);
 
     try {
       const formData = new FormData();
@@ -143,6 +150,7 @@ const ResumeAuditInteractive = () => {
         throw new Error(msg);
       }
 
+      // basic shape check
       if (!data || typeof data.resumeMindScore !== 'number' || typeof data.atsCompatibility !== 'number') {
         throw new Error('Resume audit API did not return expected JSON result.');
       }
@@ -157,7 +165,7 @@ const ResumeAuditInteractive = () => {
   };
 
   const handleExportPDF = () => {
-    alert('PDF export functionality will be implemented. Your audit report would be downloaded.');
+    alert('PDF export coming soon.');
   };
 
   const handleStartOver = () => {
@@ -180,12 +188,12 @@ const ResumeAuditInteractive = () => {
   };
 
   const handleBuildResume = () => {
-    const auditId = auditResults?.auditId;
-    if (!auditId) {
-      setApiError('auditId missing from API. Deploy the updated resume-audit route.ts and re-run audit once.');
+    const id = auditId;
+    if (!id) {
+      setApiError('auditId missing from API response. Open DevTools → Network → /api/resume-audit → Response and confirm it includes auditId.');
       return;
     }
-    router.push(`/ai-resume-builder?auditId=${encodeURIComponent(auditId)}`);
+    router.push(`/ai-resume-builder?auditId=${encodeURIComponent(id)}`);
   };
 
   if (!isHydrated) {
@@ -256,18 +264,18 @@ const ResumeAuditInteractive = () => {
           </div>
         ) : (
           <>
-            {/* ✅ “Next step” panel so the button is visible */}
+            {/* ✅ This is what your PDF is missing — the Next Step CTA */}
             <div className="bg-surface rounded-xl border border-border p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div>
                 <div className="text-sm text-text-secondary">Next step</div>
-                <div className="text-base font-semibold text-foreground">Generate your AI Resume using this Audit</div>
+                <div className="text-base font-semibold text-foreground">Build AI Resume from this Audit</div>
                 <div className="text-xs text-text-secondary break-all mt-1">
-                  Audit ID: {auditResults.auditId || '(missing)'}
+                  Audit ID: {auditId || '(missing)'}
                 </div>
               </div>
               <button
                 onClick={handleBuildResume}
-                disabled={!auditResults.auditId}
+                disabled={!auditId}
                 className="w-full sm:w-auto px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Build AI Resume
