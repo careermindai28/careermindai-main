@@ -88,13 +88,14 @@ async function extractFromDocx(buffer: Buffer) {
   return result?.value ?? "";
 }
 
-// ✅ pdf-parse ESM-safe
 async function extractFromPdf(buffer: Buffer) {
-  const mod: any = await import("pdf-parse");
-  const parse = mod?.default ?? mod;
-  const data = await parse(buffer);
+  // Force CommonJS build — stable on Vercel
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const pdfParse = require("pdf-parse/lib/pdf-parse");
+  const data = await pdfParse(buffer);
   return data?.text ?? "";
 }
+
 
 function clamp(n: any) {
   const x = Number(n);
