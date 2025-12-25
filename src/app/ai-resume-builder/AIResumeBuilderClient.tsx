@@ -271,6 +271,14 @@ export default function AIResumeBuilderClient() {
             </div>
           )}
         </div>
+
+        {data?.builderId && (
+  <div className="mt-2 text-xs text-text-secondary">
+    Your resume is automatically saved.  
+    You can generate a Cover Letter or Interview Guide anytime from this resume.
+  </div>
+)}
+
       </div>
 
       {data?.result && (

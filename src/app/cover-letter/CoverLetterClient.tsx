@@ -75,6 +75,38 @@ export default function CoverLetterClient() {
           </div>
         </>
       )}
+      {/* 🔁 Continue Actions */}
+<div className="bg-surface border border-border rounded-xl p-6">
+  <div className="text-sm text-text-secondary mb-2">Continue</div>
+  <div className="flex flex-col sm:flex-row gap-3">
+    <button
+      onClick={() => router.push(`/ai-resume-builder?auditId=`)}
+      className="px-6 py-3 border border-border bg-background rounded-lg font-semibold text-foreground"
+    >
+      Back to Resume
+    </button>
+
+    <button
+      onClick={() =>
+        router.push(
+          `/interview-guide?builderId=${encodeURIComponent(builderId)}`
+        )
+      }
+      className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold"
+    >
+      Generate Interview Guide
+    </button>
+
+    <button
+      onClick={() => router.push("/landing-page")}
+      className="px-6 py-3 border border-border bg-background rounded-lg font-semibold text-foreground"
+    >
+      Home
+    </button>
+  </div>
+</div>
+
+
     </div>
   );
 }
