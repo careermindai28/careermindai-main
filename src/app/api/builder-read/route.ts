@@ -22,7 +22,6 @@ export async function GET(req: NextRequest) {
 
     const data = snap.data() as any;
 
-    // ownership check (guest)
     if (data?.ownerType === "guest") {
       const guestSessionId = getGuestSessionId(req);
       if (!guestSessionId) return jsonError("Missing guest session.", 401);
@@ -35,6 +34,7 @@ export async function GET(req: NextRequest) {
         builderId: data.builderId,
         auditId: data.auditId,
         inputs: data.inputs || {},
+        selectedTemplate: data.selectedTemplate || "atsClassic",
         result: data.result,
       },
       { status: 200 }

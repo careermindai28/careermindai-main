@@ -2,26 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import ResumePreview from "./components/ResumePreview";
-
-type ResumeJSON = {
-  headline: string;
-  professionalSummary: string[];
-  coreSkills: string[];
-  toolsAndTech: string[];
-  experience: Array<{
-    company: string;
-    role: string;
-    location?: string;
-    dates: string;
-    bullets: string[];
-  }>;
-  education: Array<{ degree: string; institution: string; year?: string }>;
-  certifications: string[];
-  projects: Array<{ title: string; bullets: string[] }>;
-  achievements: string[];
-  keywordPack: string[];
-};
+import TemplateRenderer from "./components/TemplateRenderer";
+import { ResumeJSON, TemplateKey } from "@/lib/resumeTypes";
 
 type BuilderResponse = {
   ok: boolean;
@@ -49,8 +31,9 @@ export default function AIResumeBuilderClient() {
   const [data, setData] = useState<BuilderResponse | null>(null);
 
   const [nextLoading, setNextLoading] = useState<"" | "cover" | "interview">("");
+  const [template, setTemplate] = useState<TemplateKey>("atsClassic");
+  const [templateSaving, setTemplateSaving] = useState(false);
 
-  // ✅ If builderId is present, load resume from Firestore (re-open flow)
   useEffect(() => {
     const loadExisting = async () => {
       if (!builderIdFromUrl) return;
@@ -66,7 +49,14 @@ export default function AIResumeBuilderClient() {
         setRegion(json.inputs?.region || "india");
         setTone(json.inputs?.tone || "premium");
         setJobDescription(json.inputs?.jobDescription || "");
-        setData({ ok: true, auditId: json.auditId, builderId: json.builderId, result: json.result });
+        setTemplate((json.selectedTemplate || "atsClassic") as TemplateKey);
+
+        setData({
+          ok: true,
+          auditId: json.auditId,
+          builderId: json.builderId,
+          result: json.result,
+        });
       } catch (e: any) {
         setErr(e?.message || "Failed to load.");
       } finally {
@@ -108,28 +98,51 @@ export default function AIResumeBuilderClient() {
         }),
       });
 
-      const raw = await res.text();
-      let json: any = null;
-      try {
-        json = raw ? JSON.parse(raw) : null;
-      } catch {
-        json = null;
-      }
-
-      if (!res.ok) throw new Error(json?.error || raw || `Server error: ${res.status}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Resume build failed.");
       if (!json?.result || !json?.builderId) throw new Error("Builder API did not return expected result.");
 
-      // ✅ normalize + keep auditId
       setAuditId(json.auditId || aid);
-      const payload: BuilderResponse = { ok: true, auditId: json.auditId || aid, builderId: json.builderId, result: json.result };
-      setData(payload);
+      setTemplate((json.selectedTemplate || "atsClassic") as TemplateKey);
 
-      // ✅ update URL to include builderId (so user can come back)
+      setData({
+        ok: true,
+        auditId: json.auditId || aid,
+        builderId: json.builderId,
+        result: json.result,
+      });
+
       router.replace(`/ai-resume-builder?builderId=${encodeURIComponent(json.builderId)}`);
     } catch (e: any) {
       setErr(typeof e?.message === "string" ? e.message : "Resume build failed.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const saveTemplate = async (builderId: string, selectedTemplate: TemplateKey) => {
+    setTemplateSaving(true);
+    try {
+      const res = await fetch("/api/builder-template", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ builderId, selectedTemplate }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Failed to save template.");
+    } finally {
+      setTemplateSaving(false);
+    }
+  };
+
+  const onTemplateChange = async (val: TemplateKey) => {
+    setTemplate(val);
+    if (data?.builderId) {
+      try {
+        await saveTemplate(data.builderId, val);
+      } catch (e: any) {
+        setErr(e?.message || "Template save failed.");
+      }
     }
   };
 
@@ -147,7 +160,6 @@ export default function AIResumeBuilderClient() {
           tone,
         }),
       });
-
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "Cover letter generation failed.");
       if (!json?.coverLetterId) throw new Error("coverLetterId missing from API response.");
@@ -174,7 +186,6 @@ export default function AIResumeBuilderClient() {
           difficulty: "standard",
         }),
       });
-
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "Interview guide generation failed.");
       if (!json?.guideId) throw new Error("guideId missing from API response.");
@@ -283,9 +294,34 @@ export default function AIResumeBuilderClient() {
         )}
       </div>
 
+      {/* ✅ Template selector (minimal UI) */}
+      {data?.builderId && (
+        <div className="bg-surface border border-border rounded-xl p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-foreground">Resume Template</div>
+              <div className="text-xs text-text-secondary mt-1">Choose a layout. Content stays the same; only presentation changes.</div>
+            </div>
+            <div className="flex items-center gap-3">
+              <select
+                className="border border-border rounded-lg bg-background p-2 text-sm"
+                value={template}
+                onChange={(e) => onTemplateChange(e.target.value as TemplateKey)}
+              >
+                <option value="atsClassic">ATS Classic</option>
+                <option value="modernProfessional">Modern Professional</option>
+                <option value="executive">Executive</option>
+              </select>
+              <div className="text-xs text-text-secondary">{templateSaving ? "Saving..." : "Saved"}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ Template preview */}
       {data?.result && (
         <>
-          <ResumePreview result={data.result} />
+          <TemplateRenderer template={template} data={data.result} />
 
           <div className="bg-surface border border-border rounded-xl p-6">
             <div className="text-sm text-text-secondary mb-2">Next steps</div>
