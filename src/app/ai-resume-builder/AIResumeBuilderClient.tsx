@@ -22,9 +22,14 @@ export default function AIResumeBuilderClient() {
   const [auditId, setAuditId] = useState(auditIdFromUrl);
 
   const [targetRole, setTargetRole] = useState("");
-  const [jobDescription, setJobDescription] = useState("");
+  const [companyName, setCompanyName] = useState(""); // ✅ NEW
   const [region, setRegion] = useState("india");
   const [tone, setTone] = useState("premium");
+
+  // ✅ JD handling
+  const [jdText, setJdText] = useState(""); // canonical JD text used for tailoring
+  const [jdFileName, setJdFileName] = useState<string>("");
+  const [jdExtracting, setJdExtracting] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
@@ -34,6 +39,7 @@ export default function AIResumeBuilderClient() {
   const [template, setTemplate] = useState<TemplateKey>("atsClassic");
   const [templateSaving, setTemplateSaving] = useState(false);
 
+  // ✅ Re-open existing builder
   useEffect(() => {
     const loadExisting = async () => {
       if (!builderIdFromUrl) return;
@@ -46,9 +52,10 @@ export default function AIResumeBuilderClient() {
 
         setAuditId(json.auditId || "");
         setTargetRole(json.inputs?.targetRole || "");
+        setCompanyName(json.inputs?.companyName || "");
         setRegion(json.inputs?.region || "india");
         setTone(json.inputs?.tone || "premium");
-        setJobDescription(json.inputs?.jobDescription || "");
+        setJdText(json.inputs?.jobDescription || json.inputs?.jdText || ""); // compat
         setTemplate((json.selectedTemplate || "atsClassic") as TemplateKey);
 
         setData({
@@ -69,6 +76,32 @@ export default function AIResumeBuilderClient() {
 
   const goHome = () => router.push("/landing-page");
   const startOver = () => router.push("/resume-audit-tool");
+
+  // ✅ JD file upload → extract text via API
+  const onJDUpload = async (file: File | null) => {
+    if (!file) return;
+    setErr("");
+    setJdExtracting(true);
+    setJdFileName(file.name);
+
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+
+      const res = await fetch("/api/jd-extract", { method: "POST", body: fd });
+      const json = await res.json().catch(() => null);
+
+      if (!res.ok) throw new Error(json?.error || "JD extraction failed.");
+      if (!json?.jdText) throw new Error("No jdText returned.");
+
+      setJdText(json.jdText);
+    } catch (e: any) {
+      setErr(e?.message || "JD extraction failed.");
+      setJdFileName("");
+    } finally {
+      setJdExtracting(false);
+    }
+  };
 
   const handleBuild = async () => {
     setErr("");
@@ -92,13 +125,14 @@ export default function AIResumeBuilderClient() {
         body: JSON.stringify({
           auditId: aid,
           targetRole: targetRole.trim(),
-          jobDescription: jobDescription.trim(),
+          companyName: companyName.trim(), // ✅ NEW
+          jobDescription: jdText.trim(),   // ✅ JD text (paste or extracted)
           region,
           tone,
         }),
       });
 
-      const json = await res.json();
+      const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error || "Resume build failed.");
       if (!json?.result || !json?.builderId) throw new Error("Builder API did not return expected result.");
 
@@ -128,7 +162,7 @@ export default function AIResumeBuilderClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ builderId, selectedTemplate }),
       });
-      const json = await res.json();
+      const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error || "Failed to save template.");
     } finally {
       setTemplateSaving(false);
@@ -156,7 +190,8 @@ export default function AIResumeBuilderClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           builderId: data.builderId,
-          jobDescription: jobDescription.trim(),
+          companyName: companyName.trim(), // ✅ NEW (safe if backend ignores)
+          jobDescription: jdText.trim(),   // ✅ use same JD
           tone,
         }),
       });
@@ -182,6 +217,8 @@ export default function AIResumeBuilderClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           builderId: data.builderId,
+          companyName: companyName.trim(), // ✅ NEW (safe if backend ignores)
+          jobDescription: jdText.trim(),   // ✅ use same JD
           focus: "mixed",
           difficulty: "standard",
         }),
@@ -205,7 +242,7 @@ export default function AIResumeBuilderClient() {
           <div>
             <h1 className="text-2xl font-semibold text-foreground">AI Resume Builder</h1>
             <p className="text-sm text-text-secondary mt-2">
-              Generate an ATS-optimized resume using your Resume Audit results.
+              Tailor your resume using Target Role + optional JD.
             </p>
           </div>
           <div className="flex gap-2">
@@ -246,6 +283,16 @@ export default function AIResumeBuilderClient() {
           </div>
 
           <div>
+            <label className="text-sm font-medium text-foreground">Company Name (optional)</label>
+            <input
+              className="mt-1 w-full border border-border rounded-lg bg-background p-2"
+              placeholder="e.g., Morgan Stanley"
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
+            />
+          </div>
+
+          <div>
             <label className="text-sm font-medium text-foreground">Tone</label>
             <select className="mt-1 w-full border border-border rounded-lg bg-background p-2" value={tone} onChange={(e) => setTone(e.target.value)}>
               <option value="premium">Premium</option>
@@ -254,14 +301,47 @@ export default function AIResumeBuilderClient() {
             </select>
           </div>
 
-          <div className="md:col-span-2">
-            <label className="text-sm font-medium text-foreground">Job Description (optional)</label>
-            <textarea
-              className="mt-1 w-full border border-border rounded-lg bg-background p-2 min-h-[140px]"
-              placeholder="Paste JD to tailor keywords and bullet framing (optional)."
-              value={jobDescription}
-              onChange={(e) => setJobDescription(e.target.value)}
+          {/* ✅ JD Upload (minimal UI) */}
+          <div>
+            <label className="text-sm font-medium text-foreground">Job Description Upload (optional)</label>
+            <input
+              type="file"
+              accept=".pdf,.docx,.txt"
+              className="mt-1 w-full border border-border rounded-lg bg-background p-2 text-sm"
+              onChange={(e) => onJDUpload(e.target.files?.[0] || null)}
             />
+            <div className="mt-1 text-xs text-text-secondary">
+              {jdExtracting
+                ? "Extracting JD text..."
+                : jdFileName
+                  ? `Loaded: ${jdFileName}`
+                  : "Upload PDF/DOCX/TXT (or paste below)."}
+            </div>
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="text-sm font-medium text-foreground">Job Description (paste text, optional)</label>
+            <textarea
+              className="mt-1 w-full border border-border rounded-lg bg-background p-2 min-h-[160px]"
+              placeholder="Paste JD here (this will tailor keywords and bullet framing)."
+              value={jdText}
+              onChange={(e) => setJdText(e.target.value)}
+            />
+            {!!jdText.trim() && (
+              <div className="mt-1 text-xs text-text-secondary">
+                JD text loaded ({jdText.trim().length} chars).
+                <button
+                  type="button"
+                  className="ml-2 underline"
+                  onClick={() => {
+                    setJdText("");
+                    setJdFileName("");
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -274,7 +354,7 @@ export default function AIResumeBuilderClient() {
         <div className="mt-6 flex flex-col sm:flex-row gap-3 items-start sm:items-center">
           <button
             onClick={handleBuild}
-            disabled={loading}
+            disabled={loading || jdExtracting}
             className="px-8 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-all disabled:opacity-50"
           >
             {loading ? "Building..." : "Build CareerMindAI Resume"}
@@ -294,7 +374,7 @@ export default function AIResumeBuilderClient() {
         )}
       </div>
 
-      {/* ✅ Template selector (minimal UI) */}
+      {/* ✅ Template selector */}
       {data?.builderId && (
         <div className="bg-surface border border-border rounded-xl p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -342,13 +422,6 @@ export default function AIResumeBuilderClient() {
                 {nextLoading === "interview" ? "Generating..." : "Generate Interview Guide"}
               </button>
             </div>
-          </div>
-
-          <div className="bg-surface border border-border rounded-xl p-6 space-y-3">
-            <h2 className="text-lg font-semibold text-foreground">Raw JSON (debug)</h2>
-            <pre className="text-xs overflow-auto p-4 rounded-lg bg-background border border-border whitespace-pre-wrap break-words">
-              {JSON.stringify(data.result, null, 2)}
-            </pre>
           </div>
         </>
       )}

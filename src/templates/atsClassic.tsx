@@ -5,9 +5,7 @@ export default function ATSClassicTemplate({ data }: { data: ResumeJSON }) {
     <div className="bg-surface border border-border rounded-xl p-6">
       <div className="space-y-1">
         <div className="text-xl font-semibold text-foreground">{data.headline || "Resume"}</div>
-        <div className="text-xs text-text-secondary">
-          ATS Classic • Single-column • Safe formatting
-        </div>
+
       </div>
 
       <hr className="my-4 border-border" />

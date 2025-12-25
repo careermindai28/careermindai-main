@@ -5,9 +5,7 @@ export default function ExecutiveTemplate({ data }: { data: ResumeJSON }) {
     <div className="bg-surface border border-border rounded-xl p-6">
       <div className="space-y-2">
         <div className="text-3xl font-semibold text-foreground">{data.headline || "Executive Resume"}</div>
-        <div className="text-xs text-text-secondary">
-          Executive • Leadership tone • Achievements-first
-        </div>
+
       </div>
 
       <hr className="my-5 border-border" />

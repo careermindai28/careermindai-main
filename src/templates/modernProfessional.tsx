@@ -6,7 +6,6 @@ export default function ModernProfessionalTemplate({ data }: { data: ResumeJSON 
       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
         <div>
           <div className="text-2xl font-semibold text-foreground">{data.headline || "Resume"}</div>
-          <div className="text-xs text-text-secondary mt-1">Modern Professional • Clean hierarchy • ATS-safe</div>
         </div>
 
         {(data.coreSkills?.length || data.toolsAndTech?.length) ? (
