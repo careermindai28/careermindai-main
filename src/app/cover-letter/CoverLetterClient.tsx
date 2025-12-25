@@ -1,5 +1,7 @@
 "use client";
 
+import { printPdf } from "@/lib/printPdf";
+import { setPdfWatermark } from "@/lib/pdfWatermark";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
@@ -31,6 +33,7 @@ export default function CoverLetterClient() {
   };
 
   useEffect(() => {
+    setPdfWatermark(true);
     if (coverLetterId) load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coverLetterId]);
@@ -109,6 +112,16 @@ export default function CoverLetterClient() {
               </ul>
             )}
           </div>
+
+          <div className="no-print bg-surface border border-border rounded-xl p-6 flex justify-end">
+  <button
+    onClick={printPdf}
+    className="px-6 py-3 border border-border bg-background rounded-lg font-semibold text-foreground"
+  >
+    Download Cover Letter PDF
+  </button>
+</div>
+
 
           {/* ✅ Continue Actions */}
           <div className="bg-surface border border-border rounded-xl p-6">

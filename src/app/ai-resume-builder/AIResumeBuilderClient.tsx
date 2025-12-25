@@ -1,4 +1,6 @@
 "use client";
+import { printPdf } from "@/lib/printPdf";
+import { setPdfWatermark } from "@/lib/pdfWatermark";
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -41,6 +43,7 @@ export default function AIResumeBuilderClient() {
 
   // ✅ Re-open existing builder
   useEffect(() => {
+    setPdfWatermark(true); // default ON
     const loadExisting = async () => {
       if (!builderIdFromUrl) return;
       setErr("");
@@ -402,6 +405,15 @@ export default function AIResumeBuilderClient() {
       {data?.result && (
         <>
           <TemplateRenderer template={template} data={data.result} />
+          <div className="no-print bg-surface border border-border rounded-xl p-6 flex justify-end">
+  <button
+    onClick={printPdf}
+    className="px-6 py-3 border border-border bg-background rounded-lg font-semibold text-foreground"
+  >
+    Download Resume PDF
+  </button>
+</div>
+
 
           <div className="bg-surface border border-border rounded-xl p-6">
             <div className="text-sm text-text-secondary mb-2">Next steps</div>

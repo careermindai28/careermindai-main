@@ -1,20 +1,14 @@
-'use client';
+"use client";
 
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
-import FileUploadZone from './FileUploadZone';
-import JobDescriptionInput from './JobDescriptionInput';
-import AuditFormFields from './AuditFormFields';
-import LoadingState from './LoadingState';
-import AuditResults from './AuditResults';
+import FileUploadZone from "./FileUploadZone";
+import LoadingState from "./LoadingState";
+import AuditResults from "./AuditResults";
 
 interface FormErrors {
   file: string;
-  jobDescription: string;
-  jobDescriptionFile: string;
-  targetRole: string;
-  companyName: string;
 }
 
 interface Strength {
@@ -25,13 +19,13 @@ interface Strength {
 interface Improvement {
   title: string;
   description: string;
-  priority: 'high' | 'medium' | 'low';
+  priority: "high" | "medium" | "low";
 }
 
 interface ATSRecommendation {
   title: string;
   description: string;
-  impact: 'high' | 'medium' | 'low';
+  impact: "high" | "medium" | "low";
 }
 
 interface AuditResultsData {
@@ -53,56 +47,27 @@ interface AuditResultsData {
 }
 
 export default function ResumeAuditInteractive() {
-  console.log("🔥 ResumeAuditInteractive LOADED");
   const router = useRouter();
 
   const [isHydrated, setIsHydrated] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  const [jobDescription, setJobDescription] = useState('');
-  const [jobDescriptionFile, setJobDescriptionFile] = useState<File | null>(null);
-
-  const [targetRole, setTargetRole] = useState('');
-  const [companyName, setCompanyName] = useState('');
-  const [region, setRegion] = useState('india');
-  const [jobType, setJobType] = useState('full-time');
-
-  const [errors, setErrors] = useState<FormErrors>({
-    file: '',
-    jobDescription: '',
-    jobDescriptionFile: '',
-    targetRole: '',
-    companyName: '',
-  });
+  const [errors, setErrors] = useState<FormErrors>({ file: "" });
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [auditResults, setAuditResults] = useState<AuditResultsData | null>(null);
-  const [apiError, setApiError] = useState('');
+  const [apiError, setApiError] = useState("");
 
-  useEffect(() => {
-    setIsHydrated(true);
-  }, []);
+  useEffect(() => setIsHydrated(true), []);
 
   const auditId = useMemo(
-    () => auditResults?.auditId || auditResults?.audit_id || '',
+    () => auditResults?.auditId || auditResults?.audit_id || "",
     [auditResults]
   );
 
   const validateForm = (): boolean => {
-    const newErrors: FormErrors = {
-      file: '',
-      jobDescription: '',
-      jobDescriptionFile: '',
-      targetRole: '',
-      companyName: '',
-    };
-
-    if (!selectedFile) newErrors.file = 'Please upload your resume';
-
-    // Keep as required (as per your existing flow)
-    if (!targetRole.trim()) newErrors.targetRole = 'Target role is required';
-    if (!companyName.trim()) newErrors.companyName = 'Company name is required';
-
+    const newErrors: FormErrors = { file: "" };
+    if (!selectedFile) newErrors.file = "Please upload your resume";
     setErrors(newErrors);
     return !Object.values(newErrors).some(Boolean);
   };
@@ -111,32 +76,26 @@ export default function ResumeAuditInteractive() {
     if (!validateForm()) return;
 
     setIsAnalyzing(true);
-    setApiError('');
+    setApiError("");
     setAuditResults(null);
 
     try {
       const formData = new FormData();
-      if (!selectedFile) throw new Error('Resume file missing');
-      formData.append('resumeFile', selectedFile);
+      if (!selectedFile) throw new Error("Resume file missing");
+      formData.append("resumeFile", selectedFile);
 
-      if (jobDescription.trim()) formData.append('jobDescription', jobDescription);
-      if (targetRole.trim()) formData.append('targetRole', targetRole);
-      if (companyName.trim()) formData.append('companyName', companyName);
-      if (region) formData.append('region', region);
-      if (jobType) formData.append('experienceLevel', jobType);
-
-      const res = await fetch('/api/resume-audit', {
-        method: 'POST',
+      // ✅ Audit stays lean: NO JD, NO target role, NO company, NO job type, NO region.
+      const res = await fetch("/api/resume-audit", {
+        method: "POST",
         body: formData,
       });
 
-      const data = await res.json();
-
-      if (!res.ok) throw new Error(data?.error || 'Audit failed');
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "Audit failed");
 
       setAuditResults(data);
     } catch (e: any) {
-      setApiError(e?.message || 'Something went wrong');
+      setApiError(e?.message || "Something went wrong");
     } finally {
       setIsAnalyzing(false);
     }
@@ -144,34 +103,22 @@ export default function ResumeAuditInteractive() {
 
   const handleBuildResume = () => {
     if (!auditId) {
-      setApiError('auditId missing from API response');
+      setApiError("auditId missing from API response");
       return;
     }
     router.push(`/ai-resume-builder?auditId=${encodeURIComponent(auditId)}`);
   };
 
   const handleExportPDF = () => {
-    // keep existing behavior — you can wire export later
-    alert('PDF export will be enabled in the next phase.');
+    // keep existing behavior — we wire real exports in BLOCK 8 (below)
+    alert("PDF export will be enabled in the next phase.");
   };
 
   const handleStartOver = () => {
     setSelectedFile(null);
-    setJobDescription('');
-    setJobDescriptionFile(null);
-    setTargetRole('');
-    setCompanyName('');
-    setRegion('india');
-    setJobType('full-time');
-    setErrors({
-      file: '',
-      jobDescription: '',
-      jobDescriptionFile: '',
-      targetRole: '',
-      companyName: '',
-    });
+    setErrors({ file: "" });
     setAuditResults(null);
-    setApiError('');
+    setApiError("");
   };
 
   if (!isHydrated) return null;
@@ -189,26 +136,10 @@ export default function ResumeAuditInteractive() {
 
         {!auditResults ? (
           <div className="bg-surface border border-border rounded-xl p-6 space-y-6">
-            <FileUploadZone onFileSelect={setSelectedFile} selectedFile={selectedFile} error={errors.file} />
-
-            <JobDescriptionInput
-              value={jobDescription}
-              onChange={setJobDescription}
-              onFileSelect={setJobDescriptionFile}
-              selectedFile={jobDescriptionFile}
-              error={errors.jobDescription}
-            />
-
-            <AuditFormFields
-              targetRole={targetRole}
-              companyName={companyName}
-              region={region}
-              jobType={jobType}
-              onTargetRoleChange={setTargetRole}
-              onCompanyNameChange={setCompanyName}
-              onRegionChange={setRegion}
-              onJobTypeChange={setJobType}
-              errors={{ targetRole: errors.targetRole, companyName: errors.companyName }}
+            <FileUploadZone
+              onFileSelect={setSelectedFile}
+              selectedFile={selectedFile}
+              error={errors.file}
             />
 
             <button
@@ -225,7 +156,9 @@ export default function ResumeAuditInteractive() {
               <div>
                 <div className="text-sm text-text-secondary">Next step</div>
                 <div className="font-semibold">Build AI Resume from this Audit</div>
-                <div className="text-xs text-text-secondary break-all">Audit ID: {auditId}</div>
+                <div className="text-xs text-text-secondary break-all">
+                  Audit ID: {auditId}
+                </div>
               </div>
               <button
                 onClick={handleBuildResume}

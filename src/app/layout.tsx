@@ -1,3 +1,4 @@
+import "./globals.css";
 import React from 'react';
 import '../styles/index.css';
 import ClientRoot from '@/components/providers/ClientRoot';

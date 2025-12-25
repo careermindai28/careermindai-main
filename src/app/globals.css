@@ -1,0 +1,46 @@
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+/* =========================
+   PRINT / PDF EXPORT STYLES
+   ========================= */
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Watermark */
+  body::after {
+    content: var(--pdf-watermark, "CareerMindAI");
+    position: fixed;
+    top: 45%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-30deg);
+    font-size: 48px;
+    color: rgba(0, 0, 0, 0.08);
+    pointer-events: none;
+    z-index: 9999;
+    white-space: nowrap;
+  }
+}
+
