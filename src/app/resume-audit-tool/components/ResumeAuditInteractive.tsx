@@ -53,6 +53,7 @@ interface AuditResultsData {
 }
 
 export default function ResumeAuditInteractive() {
+  console.log("🔥 ResumeAuditInteractive LOADED");
   const router = useRouter();
 
   const [isHydrated, setIsHydrated] = useState(false);
