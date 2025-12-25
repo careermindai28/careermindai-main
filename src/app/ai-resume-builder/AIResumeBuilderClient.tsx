@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import ResumePreview from "./components/ResumePreview";
 
@@ -32,8 +32,12 @@ type BuilderResponse = {
 
 export default function AIResumeBuilderClient() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const auditId = useMemo(() => searchParams.get("auditId") || "", [searchParams]);
+  const sp = useSearchParams();
+
+  const auditIdFromUrl = useMemo(() => sp.get("auditId") || "", [sp]);
+  const builderIdFromUrl = useMemo(() => sp.get("builderId") || "", [sp]);
+
+  const [auditId, setAuditId] = useState(auditIdFromUrl);
 
   const [targetRole, setTargetRole] = useState("");
   const [jobDescription, setJobDescription] = useState("");
@@ -46,11 +50,42 @@ export default function AIResumeBuilderClient() {
 
   const [nextLoading, setNextLoading] = useState<"" | "cover" | "interview">("");
 
+  // ✅ If builderId is present, load resume from Firestore (re-open flow)
+  useEffect(() => {
+    const loadExisting = async () => {
+      if (!builderIdFromUrl) return;
+      setErr("");
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/builder-read?builderId=${encodeURIComponent(builderIdFromUrl)}`);
+        const json = await res.json();
+        if (!res.ok) throw new Error(json?.error || "Failed to load saved resume.");
+
+        setAuditId(json.auditId || "");
+        setTargetRole(json.inputs?.targetRole || "");
+        setRegion(json.inputs?.region || "india");
+        setTone(json.inputs?.tone || "premium");
+        setJobDescription(json.inputs?.jobDescription || "");
+        setData({ ok: true, auditId: json.auditId, builderId: json.builderId, result: json.result });
+      } catch (e: any) {
+        setErr(e?.message || "Failed to load.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadExisting();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [builderIdFromUrl]);
+
+  const goHome = () => router.push("/landing-page");
+  const startOver = () => router.push("/resume-audit-tool");
+
   const handleBuild = async () => {
     setErr("");
     setData(null);
 
-    if (!auditId) {
+    const aid = (auditId || "").trim();
+    if (!aid) {
       setErr("Missing auditId. Please run Resume Audit and click “Build AI Resume”.");
       return;
     }
@@ -65,7 +100,7 @@ export default function AIResumeBuilderClient() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          auditId,
+          auditId: aid,
           targetRole: targetRole.trim(),
           jobDescription: jobDescription.trim(),
           region,
@@ -81,25 +116,22 @@ export default function AIResumeBuilderClient() {
         json = null;
       }
 
-      if (!res.ok) {
-        const msg = json?.error || raw || `Server error: ${res.status}`;
-        throw new Error(msg);
-      }
+      if (!res.ok) throw new Error(json?.error || raw || `Server error: ${res.status}`);
+      if (!json?.result || !json?.builderId) throw new Error("Builder API did not return expected result.");
 
-      if (!json?.result || !json?.builderId) {
-        throw new Error("Builder API did not return expected result.");
-      }
+      // ✅ normalize + keep auditId
+      setAuditId(json.auditId || aid);
+      const payload: BuilderResponse = { ok: true, auditId: json.auditId || aid, builderId: json.builderId, result: json.result };
+      setData(payload);
 
-      setData(json as BuilderResponse);
+      // ✅ update URL to include builderId (so user can come back)
+      router.replace(`/ai-resume-builder?builderId=${encodeURIComponent(json.builderId)}`);
     } catch (e: any) {
       setErr(typeof e?.message === "string" ? e.message : "Resume build failed.");
     } finally {
       setLoading(false);
     }
   };
-
-  const goHome = () => router.push("/landing-page");
-  const startOver = () => router.push("/resume-audit-tool");
 
   const generateCoverLetter = async () => {
     if (!data?.builderId) return;
@@ -116,20 +148,13 @@ export default function AIResumeBuilderClient() {
         }),
       });
 
-      const raw = await res.text();
-      let json: any = null;
-      try {
-        json = raw ? JSON.parse(raw) : null;
-      } catch {
-        json = null;
-      }
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Cover letter generation failed.");
+      if (!json?.coverLetterId) throw new Error("coverLetterId missing from API response.");
 
-      if (!res.ok) throw new Error(json?.error || raw || `Server error: ${res.status}`);
-      const coverLetterId = json?.coverLetterId as string | undefined;
-      if (!coverLetterId) throw new Error("coverLetterId missing from API response.");
-      router.push(`/cover-letter?builderId=${encodeURIComponent(data.builderId)}&coverLetterId=${encodeURIComponent(coverLetterId)}`);
+      router.push(`/cover-letter?builderId=${encodeURIComponent(data.builderId)}&coverLetterId=${encodeURIComponent(json.coverLetterId)}`);
     } catch (e: any) {
-      setErr(typeof e?.message === "string" ? e.message : "Cover letter generation failed.");
+      setErr(e?.message || "Cover letter generation failed.");
     } finally {
       setNextLoading("");
     }
@@ -150,20 +175,13 @@ export default function AIResumeBuilderClient() {
         }),
       });
 
-      const raw = await res.text();
-      let json: any = null;
-      try {
-        json = raw ? JSON.parse(raw) : null;
-      } catch {
-        json = null;
-      }
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Interview guide generation failed.");
+      if (!json?.guideId) throw new Error("guideId missing from API response.");
 
-      if (!res.ok) throw new Error(json?.error || raw || `Server error: ${res.status}`);
-      const guideId = json?.guideId as string | undefined;
-      if (!guideId) throw new Error("guideId missing from API response.");
-      router.push(`/interview-guide?builderId=${encodeURIComponent(data.builderId)}&guideId=${encodeURIComponent(guideId)}`);
+      router.push(`/interview-guide?builderId=${encodeURIComponent(data.builderId)}&guideId=${encodeURIComponent(json.guideId)}`);
     } catch (e: any) {
-      setErr(typeof e?.message === "string" ? e.message : "Interview guide generation failed.");
+      setErr(e?.message || "Interview guide generation failed.");
     } finally {
       setNextLoading("");
     }
@@ -180,16 +198,10 @@ export default function AIResumeBuilderClient() {
             </p>
           </div>
           <div className="flex gap-2">
-            <button
-              onClick={goHome}
-              className="px-4 py-2 border border-border rounded-lg bg-background text-foreground text-sm"
-            >
+            <button onClick={goHome} className="px-4 py-2 border border-border rounded-lg bg-background text-foreground text-sm">
               Home
             </button>
-            <button
-              onClick={startOver}
-              className="px-4 py-2 border border-border rounded-lg bg-background text-foreground text-sm"
-            >
+            <button onClick={startOver} className="px-4 py-2 border border-border rounded-lg bg-background text-foreground text-sm">
               Start Over
             </button>
           </div>
@@ -203,11 +215,7 @@ export default function AIResumeBuilderClient() {
 
           <div>
             <label className="text-sm font-medium text-foreground">Region</label>
-            <select
-              className="mt-1 w-full border border-border rounded-lg bg-background p-2"
-              value={region}
-              onChange={(e) => setRegion(e.target.value)}
-            >
+            <select className="mt-1 w-full border border-border rounded-lg bg-background p-2" value={region} onChange={(e) => setRegion(e.target.value)}>
               <option value="india">India</option>
               <option value="gcc">GCC / Middle East</option>
               <option value="global">Global</option>
@@ -228,11 +236,7 @@ export default function AIResumeBuilderClient() {
 
           <div>
             <label className="text-sm font-medium text-foreground">Tone</label>
-            <select
-              className="mt-1 w-full border border-border rounded-lg bg-background p-2"
-              value={tone}
-              onChange={(e) => setTone(e.target.value)}
-            >
+            <select className="mt-1 w-full border border-border rounded-lg bg-background p-2" value={tone} onChange={(e) => setTone(e.target.value)}>
               <option value="premium">Premium</option>
               <option value="executive">Executive</option>
               <option value="concise">Concise</option>
@@ -273,19 +277,16 @@ export default function AIResumeBuilderClient() {
         </div>
 
         {data?.builderId && (
-  <div className="mt-2 text-xs text-text-secondary">
-    Your resume is automatically saved.  
-    You can generate a Cover Letter or Interview Guide anytime from this resume.
-  </div>
-)}
-
+          <div className="mt-2 text-xs text-text-secondary">
+            Your resume is automatically saved. You can generate a Cover Letter or Interview Guide anytime from this resume.
+          </div>
+        )}
       </div>
 
       {data?.result && (
         <>
           <ResumePreview result={data.result} />
 
-          {/* ✅ Continue CTAs */}
           <div className="bg-surface border border-border rounded-xl p-6">
             <div className="text-sm text-text-secondary mb-2">Next steps</div>
             <div className="flex flex-col sm:flex-row gap-3">

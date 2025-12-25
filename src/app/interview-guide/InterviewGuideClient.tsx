@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
 export default function InterviewGuideClient() {
@@ -13,6 +13,7 @@ export default function InterviewGuideClient() {
   const [content, setContent] = useState<any>(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
+  const [nextLoading, setNextLoading] = useState(false);
 
   const load = async () => {
     setErr("");
@@ -26,6 +27,41 @@ export default function InterviewGuideClient() {
       setErr(e?.message || "Failed to load.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (guideId) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guideId]);
+
+  const backToResume = () => {
+    if (!builderId) return;
+    router.push(`/ai-resume-builder?builderId=${encodeURIComponent(builderId)}`);
+  };
+
+  const generateCoverLetter = async () => {
+    if (!builderId) return;
+    setErr("");
+    setNextLoading(true);
+    try {
+      const res = await fetch("/api/cover-letter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          builderId,
+          jobDescription: "",
+          tone: "premium",
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Cover letter generation failed.");
+      if (!json?.coverLetterId) throw new Error("coverLetterId missing from API response.");
+      router.push(`/cover-letter?builderId=${encodeURIComponent(builderId)}&coverLetterId=${encodeURIComponent(json.coverLetterId)}`);
+    } catch (e: any) {
+      setErr(e?.message || "Cover letter generation failed.");
+    } finally {
+      setNextLoading(false);
     }
   };
 
@@ -46,16 +82,23 @@ export default function InterviewGuideClient() {
         </div>
       </div>
 
-      {!content && (
-        <div className="bg-surface border border-border rounded-xl p-6">
-          <button onClick={load} disabled={loading || !guideId} className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold disabled:opacity-50">
-            {loading ? "Loading..." : "Load Interview Guide"}
-          </button>
-          {err && <div className="mt-3 text-sm text-red-400">{err}</div>}
+      {err && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-red-400 text-sm">
+          {err}
         </div>
       )}
 
-      {content && (
+      {!content ? (
+        <div className="bg-surface border border-border rounded-xl p-6">
+          <button
+            onClick={load}
+            disabled={loading || !guideId}
+            className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold disabled:opacity-50"
+          >
+            {loading ? "Loading..." : "Load Interview Guide"}
+          </button>
+        </div>
+      ) : (
         <>
           <div className="bg-surface border border-border rounded-xl p-6 space-y-4">
             {content.overview && <p className="text-sm text-foreground whitespace-pre-wrap break-words">{content.overview}</p>}
@@ -114,6 +157,28 @@ export default function InterviewGuideClient() {
             )}
           </div>
 
+          {/* ✅ Continue Actions */}
+          <div className="bg-surface border border-border rounded-xl p-6">
+            <div className="text-sm text-text-secondary mb-2">Continue</div>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={backToResume}
+                disabled={!builderId}
+                className="px-6 py-3 border border-border bg-background rounded-lg font-semibold text-foreground disabled:opacity-50"
+              >
+                Back to Resume
+              </button>
+
+              <button
+                onClick={generateCoverLetter}
+                disabled={!builderId || nextLoading}
+                className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold disabled:opacity-50"
+              >
+                {nextLoading ? "Generating..." : "Generate Cover Letter"}
+              </button>
+            </div>
+          </div>
+
           <div className="bg-surface border border-border rounded-xl p-6">
             <h2 className="text-lg font-semibold text-foreground mb-2">Raw JSON (debug)</h2>
             <pre className="text-xs overflow-auto p-4 rounded-lg bg-background border border-border whitespace-pre-wrap break-words">
@@ -122,38 +187,6 @@ export default function InterviewGuideClient() {
           </div>
         </>
       )}
-
-      {/* 🔁 Continue Actions */}
-<div className="bg-surface border border-border rounded-xl p-6">
-  <div className="text-sm text-text-secondary mb-2">Continue</div>
-  <div className="flex flex-col sm:flex-row gap-3">
-    <button
-      onClick={() => router.push(`/ai-resume-builder?auditId=`)}
-      className="px-6 py-3 border border-border bg-background rounded-lg font-semibold text-foreground"
-    >
-      Back to Resume
-    </button>
-
-    <button
-      onClick={() =>
-        router.push(
-          `/cover-letter?builderId=${encodeURIComponent(builderId)}`
-        )
-      }
-      className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold"
-    >
-      Generate Cover Letter
-    </button>
-
-    <button
-      onClick={() => router.push("/landing-page")}
-      className="px-6 py-3 border border-border bg-background rounded-lg font-semibold text-foreground"
-    >
-      Home
-    </button>
-  </div>
-</div>
-
     </div>
   );
 }
