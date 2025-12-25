@@ -1,57 +1,95 @@
-'use client';
+"use client";
 
-import { useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import ResumePreview from "./components/ResumePreview";
+
+type ResumeJSON = {
+  headline: string;
+  professionalSummary: string[];
+  coreSkills: string[];
+  toolsAndTech: string[];
+  experience: Array<{
+    company: string;
+    role: string;
+    location?: string;
+    dates: string;
+    bullets: string[];
+  }>;
+  education: Array<{ degree: string; institution: string; year?: string }>;
+  certifications: string[];
+  projects: Array<{ title: string; bullets: string[] }>;
+  achievements: string[];
+  keywordPack: string[];
+};
 
 type BuilderResponse = {
+  ok: boolean;
   auditId: string;
-  result: any;
+  builderId: string;
+  result: ResumeJSON;
 };
 
 export default function AIResumeBuilderClient() {
   const searchParams = useSearchParams();
-  const auditId = useMemo(() => searchParams.get('auditId') || '', [searchParams]);
+  const auditId = useMemo(() => searchParams.get("auditId") || "", [searchParams]);
 
-  const [targetRole, setTargetRole] = useState('');
-  const [jobDescription, setJobDescription] = useState('');
-  const [region, setRegion] = useState('india');
-  const [tone, setTone] = useState('premium');
+  const [targetRole, setTargetRole] = useState("");
+  const [jobDescription, setJobDescription] = useState("");
+  const [region, setRegion] = useState("india");
+  const [tone, setTone] = useState("premium");
 
   const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState('');
+  const [err, setErr] = useState("");
   const [data, setData] = useState<BuilderResponse | null>(null);
 
   const handleBuild = async () => {
-    setErr('');
+    setErr("");
     setData(null);
 
     if (!auditId) {
-      setErr('Missing auditId. Please run Resume Audit and click “Build AI Resume”.');
+      setErr("Missing auditId. Please run Resume Audit and click “Build AI Resume”.");
       return;
     }
     if (!targetRole.trim()) {
-      setErr('Please enter a Target Role.');
+      setErr("Please enter a Target Role.");
       return;
     }
 
     setLoading(true);
     try {
-      const res = await fetch('/api/resume-builder', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ auditId, targetRole, jobDescription, region, tone }),
+      const res = await fetch("/api/resume-builder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          auditId,
+          targetRole: targetRole.trim(),
+          jobDescription: jobDescription.trim(),
+          region,
+          tone,
+        }),
       });
 
       const raw = await res.text();
       let json: any = null;
-      try { json = raw ? JSON.parse(raw) : null; } catch { json = null; }
+      try {
+        json = raw ? JSON.parse(raw) : null;
+      } catch {
+        json = null;
+      }
 
-      if (!res.ok) throw new Error(json?.error || raw || `Server error: ${res.status}`);
-      if (!json?.result) throw new Error('Builder API did not return a result.');
+      if (!res.ok) {
+        const msg = json?.error || raw || `Server error: ${res.status}`;
+        throw new Error(msg);
+      }
+
+      if (!json?.result || !json?.builderId) {
+        throw new Error("Builder API did not return expected result.");
+      }
 
       setData(json as BuilderResponse);
     } catch (e: any) {
-      setErr(typeof e?.message === 'string' ? e.message : 'Resume build failed.');
+      setErr(typeof e?.message === "string" ? e.message : "Resume build failed.");
     } finally {
       setLoading(false);
     }
@@ -62,13 +100,13 @@ export default function AIResumeBuilderClient() {
       <div className="bg-surface border border-border rounded-xl p-6">
         <h1 className="text-2xl font-semibold text-foreground">AI Resume Builder</h1>
         <p className="text-sm text-text-secondary mt-2">
-          Build an ATS-optimized resume using your Resume Audit results.
+          Generate an ATS-optimized resume using your Resume Audit results.
         </p>
 
         <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="text-sm font-medium text-foreground">Audit ID</label>
-            <div className="mt-1 text-sm text-text-secondary break-all">{auditId || '(missing)'}</div>
+            <div className="mt-1 text-sm text-text-secondary break-all">{auditId || "(missing)"}</div>
           </div>
 
           <div>
@@ -79,10 +117,10 @@ export default function AIResumeBuilderClient() {
               onChange={(e) => setRegion(e.target.value)}
             >
               <option value="india">India</option>
+              <option value="gcc">GCC / Middle East</option>
               <option value="global">Global</option>
-              <option value="middle-east">Middle East</option>
-              <option value="europe">Europe</option>
               <option value="usa">USA</option>
+              <option value="europe">Europe</option>
             </select>
           </div>
 
@@ -90,7 +128,7 @@ export default function AIResumeBuilderClient() {
             <label className="text-sm font-medium text-foreground">Target Role *</label>
             <input
               className="mt-1 w-full border border-border rounded-lg bg-background p-2"
-              placeholder="e.g., Market Risk Manager"
+              placeholder="e.g., Senior Market Risk Manager"
               value={targetRole}
               onChange={(e) => setTargetRole(e.target.value)}
             />
@@ -104,8 +142,8 @@ export default function AIResumeBuilderClient() {
               onChange={(e) => setTone(e.target.value)}
             >
               <option value="premium">Premium</option>
-              <option value="concise">Concise</option>
               <option value="executive">Executive</option>
+              <option value="concise">Concise</option>
             </select>
           </div>
 
@@ -113,7 +151,7 @@ export default function AIResumeBuilderClient() {
             <label className="text-sm font-medium text-foreground">Job Description (optional)</label>
             <textarea
               className="mt-1 w-full border border-border rounded-lg bg-background p-2 min-h-[140px]"
-              placeholder="Paste JD to tailor keywords and achievements (optional)."
+              placeholder="Paste JD to tailor keywords and bullet framing (optional)."
               value={jobDescription}
               onChange={(e) => setJobDescription(e.target.value)}
             />
@@ -126,24 +164,35 @@ export default function AIResumeBuilderClient() {
           </div>
         )}
 
-        <div className="mt-6">
+        <div className="mt-6 flex flex-col sm:flex-row gap-3">
           <button
             onClick={handleBuild}
             disabled={loading}
             className="px-8 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-all disabled:opacity-50"
           >
-            {loading ? 'Building...' : 'Generate AI Resume'}
+            {loading ? "Building..." : "Generate AI Resume"}
           </button>
+
+          {data?.builderId && (
+            <div className="text-xs text-text-secondary self-center break-all">
+              Builder ID: {data.builderId}
+            </div>
+          )}
         </div>
       </div>
 
+      {/* ✅ FIXED: Real preview (no truncation). Raw JSON still available below */}
       {data?.result && (
-        <div className="bg-surface border border-border rounded-xl p-6 space-y-3">
-          <h2 className="text-lg font-semibold text-foreground">Preview (JSON)</h2>
-          <pre className="text-xs overflow-auto p-4 rounded-lg bg-background border border-border">
-            {JSON.stringify(data.result, null, 2)}
-          </pre>
-        </div>
+        <>
+          <ResumePreview result={data.result} />
+
+          <div className="bg-surface border border-border rounded-xl p-6 space-y-3">
+            <h2 className="text-lg font-semibold text-foreground">Raw JSON (debug)</h2>
+            <pre className="text-xs overflow-auto p-4 rounded-lg bg-background border border-border whitespace-pre-wrap break-words">
+              {JSON.stringify(data.result, null, 2)}
+            </pre>
+          </div>
+        </>
       )}
     </div>
   );

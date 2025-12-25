@@ -1,7 +1,7 @@
-import { Suspense } from 'react';
-import AIResumeBuilderClient from './AIResumeBuilderClient';
+import { Suspense } from "react";
+import AIResumeBuilderClient from "./AIResumeBuilderClient";
 
-export const dynamic = 'force-dynamic'; // ensure runtime render (prevents static export issues)
+export const dynamic = "force-dynamic";
 
 export default function Page() {
   return (

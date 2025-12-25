@@ -21,72 +21,110 @@ function clampLen(s: string, max = 12000) {
   return t.length > max ? t.slice(0, max) : t;
 }
 
-export async function POST(req: NextRequest) {
-  try {
-    const guestSessionId = getGuestSessionId(req);
+type BuilderInput = {
+  auditId: string;
+  targetRole: string;
+  jobDescription?: string;
+  region?: string;
+  tone?: string;
+};
 
-    const body = await req.json().catch(() => null);
-    if (!body) return jsonError("Invalid JSON body.", 400);
+type ResumeJSON = {
+  headline: string;
+  professionalSummary: string[];
+  coreSkills: string[];
+  toolsAndTech: string[];
+  experience: Array<{
+    company: string;
+    role: string;
+    location?: string;
+    dates: string;
+    bullets: string[];
+  }>;
+  education: Array<{ degree: string; institution: string; year?: string }>;
+  certifications: string[];
+  projects: Array<{ title: string; bullets: string[] }>;
+  achievements: string[];
+  keywordPack: string[];
+};
 
-    const auditId = String(body.auditId || "").trim();
-    const targetRole = String(body.targetRole || "").trim();
-    const jobDescription = String(body.jobDescription || "").trim();
-    const region = String(body.region || "india").trim();
-    const tone = String(body.tone || "premium").trim();
+function isStringArray(v: any) {
+  return Array.isArray(v) && v.every((x) => typeof x === "string");
+}
 
-    if (!auditId) return jsonError("auditId is required.", 400);
-    if (!targetRole) return jsonError("targetRole is required.", 400);
+function validateResumeJSON(obj: any): { ok: true; value: ResumeJSON } | { ok: false; reason: string } {
+  if (!obj || typeof obj !== "object") return { ok: false, reason: "Not an object" };
 
-    const db = getFirestore();
-    const auditRef = db.collection("audits").doc(auditId);
-    const auditSnap = await auditRef.get();
+  const requiredString = ["headline"] as const;
+  for (const k of requiredString) {
+    if (typeof obj[k] !== "string" || !obj[k].trim()) return { ok: false, reason: `Missing/invalid ${k}` };
+  }
 
-    if (!auditSnap.exists) return jsonError("Audit not found.", 404);
+  const requiredArr = ["professionalSummary", "coreSkills", "toolsAndTech", "certifications", "achievements", "keywordPack"] as const;
+  for (const k of requiredArr) {
+    if (!isStringArray(obj[k])) return { ok: false, reason: `Missing/invalid ${k}` };
+  }
 
-    const audit = auditSnap.data() as any;
-
-    // ✅ Ownership check (guest mode)
-    if (audit?.ownerType === "guest") {
-      if (!guestSessionId) return jsonError("Missing guest session.", 401);
-      if (audit?.ownerId !== guestSessionId) return jsonError("Unauthorized auditId.", 403);
+  if (!Array.isArray(obj.experience)) return { ok: false, reason: "Missing/invalid experience" };
+  for (const e of obj.experience) {
+    if (!e || typeof e !== "object") return { ok: false, reason: "Invalid experience item" };
+    if (typeof e.company !== "string" || typeof e.role !== "string" || typeof e.dates !== "string") {
+      return { ok: false, reason: "Experience item missing company/role/dates" };
     }
-    // (Later: if ownerType === "user", verify Firebase auth uid)
+    if (!isStringArray(e.bullets)) return { ok: false, reason: "Experience bullets invalid" };
+  }
 
-    const resumeText = String(audit?.resumeText || "");
-    if (!resumeText || resumeText.trim().length < 200) {
-      return jsonError("Resume text missing from audit. Re-run Resume Audit.", 400);
+  if (!Array.isArray(obj.education)) return { ok: false, reason: "Missing/invalid education" };
+  for (const ed of obj.education) {
+    if (!ed || typeof ed !== "object") return { ok: false, reason: "Invalid education item" };
+    if (typeof ed.degree !== "string" || typeof ed.institution !== "string") {
+      return { ok: false, reason: "Education item missing degree/institution" };
     }
+  }
 
-    const auditResult = audit?.auditResult || null;
+  if (!Array.isArray(obj.projects)) return { ok: false, reason: "Missing/invalid projects" };
+  for (const p of obj.projects) {
+    if (!p || typeof p !== "object") return { ok: false, reason: "Invalid project item" };
+    if (typeof p.title !== "string") return { ok: false, reason: "Project missing title" };
+    if (!isStringArray(p.bullets)) return { ok: false, reason: "Project bullets invalid" };
+  }
 
-    const system = `You are a world-class resume writer for ATS. Return ONLY valid JSON (single object). No markdown.`;
+  return { ok: true, value: obj as ResumeJSON };
+}
 
-    const user = `
+async function generateResumeJSON(payload: {
+  resumeText: string;
+  auditResult: any;
+  input: BuilderInput;
+}) {
+  const { resumeText, auditResult, input } = payload;
+
+  const system =
+    `You are a world-class ATS resume writer. Return ONLY valid JSON (single object). No markdown.\n` +
+    `Rules:\n` +
+    `- Do NOT invent employers, job titles, education, certifications, or tools.\n` +
+    `- Do NOT invent numbers/metrics. If not present in source, avoid numeric claims.\n` +
+    `- It’s okay to say “improved efficiency” without quantifying.\n` +
+    `- Bullets must be crisp, achievement-led, and aligned to the target role.\n`;
+
+  const user = `
 RESUME TEXT (source):
 ${resumeText}
 
-AUDIT SUMMARY (may help):
+AUDIT RESULT (for guidance):
 ${auditResult ? JSON.stringify(auditResult).slice(0, 4000) : "N/A"}
 
 TARGET ROLE:
-${targetRole}
+${input.targetRole}
 
 REGION:
-${region}
+${input.region || "india"}
 
 TONE:
-${tone}
+${input.tone || "premium"}
 
 JOB DESCRIPTION (optional):
-${clampLen(jobDescription, 8000) || "N/A"}
-
-TASK:
-Create a rewritten ATS-optimized resume in JSON with NO fake skills.
-- Keep only skills supported by source resume or clearly implied by experience.
-- Quantify impact where possible but do not invent numbers.
-- Make bullets crisp, achievement-led, and role-aligned.
-- Ensure strong keyword coverage for target role.
-- Output must be consistent and easy to render.
+${clampLen(input.jobDescription || "", 8000) || "N/A"}
 
 Return EXACT JSON schema:
 {
@@ -113,27 +151,103 @@ Return EXACT JSON schema:
 }
 `.trim();
 
-    const completion = await openai.chat.completions.create({
+  const completion = await openai.chat.completions.create({
+    model: DEFAULT_MODEL,
+    temperature: 0.25,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+  });
+
+  const raw = completion.choices?.[0]?.message?.content;
+  if (!raw) throw new Error("No response from AI. Try again.");
+
+  let obj: any;
+  try {
+    obj = JSON.parse(raw);
+  } catch {
+    throw new Error("AI returned invalid JSON. Try again.");
+  }
+
+  const v = validateResumeJSON(obj);
+  if (!v.ok) {
+    // One repair attempt
+    const repair = await openai.chat.completions.create({
       model: DEFAULT_MODEL,
-      temperature: 0.25,
+      temperature: 0,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
+        { role: "system", content: "You repair JSON to match required schema. Return ONLY JSON." },
+        {
+          role: "user",
+          content:
+            `Fix this JSON to match schema exactly. Do not add fake info.\n` +
+            `Schema is same as earlier.\n\nJSON:\n${raw}\n\nReason it failed: ${v.reason}`,
+        },
       ],
     });
 
-    const raw = completion.choices?.[0]?.message?.content;
-    if (!raw) return jsonError("No response from AI. Try again.", 500);
+    const repairedRaw = repair.choices?.[0]?.message?.content;
+    if (!repairedRaw) throw new Error("AI returned empty repair JSON.");
 
-    let result: any = null;
+    let repaired: any;
     try {
-      result = JSON.parse(raw);
+      repaired = JSON.parse(repairedRaw);
     } catch {
-      return jsonError("AI returned invalid JSON. Try again.", 500);
+      throw new Error("AI repair returned invalid JSON.");
+    }
+
+    const v2 = validateResumeJSON(repaired);
+    if (!v2.ok) throw new Error(`AI JSON invalid after repair: ${v2.reason}`);
+    return v2.value;
+  }
+
+  return v.value;
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const guestSessionId = getGuestSessionId(req);
+
+    const body = (await req.json().catch(() => null)) as BuilderInput | null;
+    if (!body) return jsonError("Invalid JSON body.", 400);
+
+    const auditId = String(body.auditId || "").trim();
+    const targetRole = String(body.targetRole || "").trim();
+    const jobDescription = String(body.jobDescription || "").trim();
+    const region = String(body.region || "india").trim();
+    const tone = String(body.tone || "premium").trim();
+
+    if (!auditId) return jsonError("auditId is required.", 400);
+    if (!targetRole) return jsonError("targetRole is required.", 400);
+
+    const db = getFirestore();
+    const auditRef = db.collection("audits").doc(auditId);
+    const auditSnap = await auditRef.get();
+    if (!auditSnap.exists) return jsonError("Audit not found.", 404);
+
+    const audit = auditSnap.data() as any;
+
+    // ✅ Ownership check (guest mode)
+    if (audit?.ownerType === "guest") {
+      if (!guestSessionId) return jsonError("Missing guest session.", 401);
+      if (audit?.ownerId !== guestSessionId) return jsonError("Unauthorized auditId.", 403);
+    }
+
+    const resumeText = String(audit?.resumeText || "");
+    if (!resumeText || resumeText.trim().length < 200) {
+      return jsonError("Resume text missing from audit. Re-run Resume Audit.", 400);
     }
 
     const builderId = crypto.randomUUID();
+
+    const result = await generateResumeJSON({
+      resumeText,
+      auditResult: audit?.auditResult || null,
+      input: { auditId, targetRole, jobDescription, region, tone },
+    });
 
     await db.collection("builders").doc(builderId).set({
       builderId,
@@ -142,23 +256,12 @@ Return EXACT JSON schema:
       ownerId: audit.ownerId || guestSessionId || null,
       createdAt: new Date(),
       updatedAt: new Date(),
-      inputs: {
-        targetRole,
-        region,
-        tone,
-        jobDescription: jobDescription ? jobDescription : null,
-      },
+      inputs: { targetRole, region, tone, jobDescription: jobDescription || null },
       result,
     });
 
-    return NextResponse.json(
-      { ok: true, auditId, builderId, result },
-      { status: 200 }
-    );
+    return NextResponse.json({ ok: true, auditId, builderId, result }, { status: 200 });
   } catch (e: any) {
-    return jsonError(
-      typeof e?.message === "string" ? e.message : "Resume build failed.",
-      500
-    );
+    return jsonError(typeof e?.message === "string" ? e.message : "Resume build failed.", 500);
   }
 }
