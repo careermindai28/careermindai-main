@@ -58,12 +58,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    /**
-     * IMPORTANT:
-     * Vercel sometimes prunes node_modules. We will:
-     * 1) force-include chromium bin via next.config.mjs (see below)
-     * 2) pass inputDir explicitly to chromium.executablePath()
-     */
+    // Ensure sparticuz chromium has inputDir for brotli bin files
     const inputDir = path.join(process.cwd(), "node_modules", "@sparticuz", "chromium", "bin");
     const executablePath = await chromium.executablePath(inputDir);
 
@@ -75,38 +70,16 @@ export async function POST(req: NextRequest) {
 
     try {
       const page = await browser.newPage();
-
-      // Consistent rendering
       await page.setViewport({ width: 1240, height: 1754, deviceScaleFactor: 1 });
+
       await page.goto(printUrl, { waitUntil: "networkidle2", timeout: 60_000 });
 
-      // Guard: if print route returned an error page
-      const html = await page.content();
-      const lower = html.toLowerCase();
-      if (lower.includes("unauthorized") || lower.includes("forbidden") || lower.includes("not found")) {
-        return new Response(
-          JSON.stringify({
-            ok: false,
-            error: "Print page returned Unauthorized/Forbidden/Not Found",
-            debug: { printUrl, htmlSnippet: html.slice(0, 500) },
-          }),
-          { status: 403, headers: { "Content-Type": "application/json" } }
-        );
-      }
-
+      // Generate PDF with NO header/footer (watermark is inside HTML print layout)
       const pdfBuffer = await page.pdf({
         format: "A4",
         printBackground: true,
-        margin: { top: "18mm", right: "14mm", bottom: "18mm", left: "14mm" },
-        displayHeaderFooter: true,
-        headerTemplate: `
-          <div style="font-size:10px;width:100%;text-align:center;color:#8a8a8a;">
-            CareerMindAI
-          </div>`,
-        footerTemplate: `
-          <div style="font-size:10px;width:100%;text-align:center;color:#8a8a8a;">
-            Page <span class="pageNumber"></span> of <span class="totalPages"></span>
-          </div>`,
+        displayHeaderFooter: false,
+        margin: { top: "14mm", right: "14mm", bottom: "14mm", left: "14mm" },
       });
 
       return new Response(new Uint8Array(pdfBuffer), {
