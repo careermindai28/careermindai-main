@@ -1,6 +1,8 @@
 "use client";
-import { printPdf } from "@/lib/printPdf";
+
 import { setPdfWatermark } from "@/lib/pdfWatermark";
+import { downloadPdf } from "@/lib/downloadPdf";
+import { getCareerMindAILoadingLine } from "@/lib/careermindaiLoadingLines";
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -40,6 +42,10 @@ export default function AIResumeBuilderClient() {
   const [nextLoading, setNextLoading] = useState<"" | "cover" | "interview">("");
   const [template, setTemplate] = useState<TemplateKey>("atsClassic");
   const [templateSaving, setTemplateSaving] = useState(false);
+
+  // ✅ PDF export UX
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfLine, setPdfLine] = useState("");
 
   // ✅ Re-open existing builder
   useEffect(() => {
@@ -238,6 +244,28 @@ export default function AIResumeBuilderClient() {
     }
   };
 
+  const handleDownloadResumePdf = async () => {
+    const id = (data?.builderId || builderIdFromUrl || "").trim();
+    if (!id) {
+      setErr("Missing builderId. Please generate the resume first.");
+      return;
+    }
+
+    setPdfLine(getCareerMindAILoadingLine());
+    await downloadPdf("resume", id, {
+      onStart: () => setPdfLoading(true),
+      onDone: () => {
+        setPdfLoading(false);
+        setPdfLine("");
+      },
+      onError: (msg) => {
+        setPdfLoading(false);
+        setPdfLine("");
+        alert(msg);
+      },
+    });
+  };
+
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       <div className="bg-surface border border-border rounded-xl p-6">
@@ -405,15 +433,22 @@ export default function AIResumeBuilderClient() {
       {data?.result && (
         <>
           <TemplateRenderer template={template} data={data.result} />
-          <div className="no-print bg-surface border border-border rounded-xl p-6 flex justify-end">
-  <button
-    onClick={printPdf}
-    className="px-6 py-3 border border-border bg-background rounded-lg font-semibold text-foreground"
-  >
-    Download Resume PDF
-  </button>
-</div>
 
+          <div className="no-print bg-surface border border-border rounded-xl p-6 flex flex-col items-end gap-2">
+            <button
+              onClick={handleDownloadResumePdf}
+              disabled={pdfLoading}
+              className="px-6 py-3 border border-border bg-background rounded-lg font-semibold text-foreground disabled:opacity-50"
+            >
+              {pdfLoading ? "Generating PDF..." : "Download Resume PDF"}
+            </button>
+
+            {pdfLoading && (
+              <div className="text-xs text-text-secondary max-w-xl text-right">
+                {pdfLine}
+              </div>
+            )}
+          </div>
 
           <div className="bg-surface border border-border rounded-xl p-6">
             <div className="text-sm text-text-secondary mb-2">Next steps</div>

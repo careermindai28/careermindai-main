@@ -1,10 +1,10 @@
 "use client";
 
-import { printPdf } from "@/lib/printPdf";
 import { setPdfWatermark } from "@/lib/pdfWatermark";
-
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { downloadPdf } from "@/lib/downloadPdf";
+import { getCareerMindAILoadingLine } from "@/lib/careermindaiLoadingLines";
 
 export default function InterviewGuideClient() {
   const router = useRouter();
@@ -17,6 +17,10 @@ export default function InterviewGuideClient() {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
   const [nextLoading, setNextLoading] = useState(false);
+
+  // ✅ PDF export UX
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfLine, setPdfLine] = useState("");
 
   const load = async () => {
     setErr("");
@@ -67,6 +71,28 @@ export default function InterviewGuideClient() {
     } finally {
       setNextLoading(false);
     }
+  };
+
+  const handleDownloadInterviewGuidePdf = async () => {
+    if (!guideId) {
+      setErr("Missing guideId.");
+      return;
+    }
+
+    setPdfLine(getCareerMindAILoadingLine());
+
+    await downloadPdf("interviewGuide", guideId, {
+      onStart: () => setPdfLoading(true),
+      onDone: () => {
+        setPdfLoading(false);
+        setPdfLine("");
+      },
+      onError: (msg) => {
+        setPdfLoading(false);
+        setPdfLine("");
+        alert(msg);
+      },
+    });
   };
 
   return (
@@ -161,15 +187,21 @@ export default function InterviewGuideClient() {
             )}
           </div>
 
-          <div className="no-print bg-surface border border-border rounded-xl p-6 flex justify-end">
-  <button
-    onClick={printPdf}
-    className="px-6 py-3 border border-border bg-background rounded-lg font-semibold text-foreground"
-  >
-    Download Interview Guide PDF
-  </button>
-</div>
+          <div className="no-print bg-surface border border-border rounded-xl p-6 flex flex-col items-end gap-2">
+            <button
+              onClick={handleDownloadInterviewGuidePdf}
+              disabled={pdfLoading}
+              className="px-6 py-3 border border-border bg-background rounded-lg font-semibold text-foreground disabled:opacity-50"
+            >
+              {pdfLoading ? "Generating PDF..." : "Download Interview Guide PDF"}
+            </button>
 
+            {pdfLoading && (
+              <div className="text-xs text-text-secondary max-w-xl text-right">
+                {pdfLine}
+              </div>
+            )}
+          </div>
 
           {/* ✅ Continue Actions */}
           <div className="bg-surface border border-border rounded-xl p-6">

@@ -1,9 +1,10 @@
 "use client";
 
-import { printPdf } from "@/lib/printPdf";
 import { setPdfWatermark } from "@/lib/pdfWatermark";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { downloadPdf } from "@/lib/downloadPdf";
+import { getCareerMindAILoadingLine } from "@/lib/careermindaiLoadingLines";
 
 export default function CoverLetterClient() {
   const router = useRouter();
@@ -16,6 +17,10 @@ export default function CoverLetterClient() {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
   const [nextLoading, setNextLoading] = useState(false);
+
+  // ✅ PDF export UX
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfLine, setPdfLine] = useState("");
 
   const load = async () => {
     setErr("");
@@ -68,6 +73,27 @@ export default function CoverLetterClient() {
     }
   };
 
+  const handleDownloadCoverLetterPdf = async () => {
+    if (!coverLetterId) {
+      setErr("Missing coverLetterId.");
+      return;
+    }
+    setPdfLine(getCareerMindAILoadingLine());
+
+    await downloadPdf("coverLetter", coverLetterId, {
+      onStart: () => setPdfLoading(true),
+      onDone: () => {
+        setPdfLoading(false);
+        setPdfLine("");
+      },
+      onError: (msg) => {
+        setPdfLoading(false);
+        setPdfLine("");
+        alert(msg);
+      },
+    });
+  };
+
   return (
     <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
       <div className="bg-surface border border-border rounded-xl p-6 flex items-center justify-between gap-3">
@@ -113,15 +139,21 @@ export default function CoverLetterClient() {
             )}
           </div>
 
-          <div className="no-print bg-surface border border-border rounded-xl p-6 flex justify-end">
-  <button
-    onClick={printPdf}
-    className="px-6 py-3 border border-border bg-background rounded-lg font-semibold text-foreground"
-  >
-    Download Cover Letter PDF
-  </button>
-</div>
+          <div className="no-print bg-surface border border-border rounded-xl p-6 flex flex-col items-end gap-2">
+            <button
+              onClick={handleDownloadCoverLetterPdf}
+              disabled={pdfLoading}
+              className="px-6 py-3 border border-border bg-background rounded-lg font-semibold text-foreground disabled:opacity-50"
+            >
+              {pdfLoading ? "Generating PDF..." : "Download Cover Letter PDF"}
+            </button>
 
+            {pdfLoading && (
+              <div className="text-xs text-text-secondary max-w-xl text-right">
+                {pdfLine}
+              </div>
+            )}
+          </div>
 
           {/* ✅ Continue Actions */}
           <div className="bg-surface border border-border rounded-xl p-6">
