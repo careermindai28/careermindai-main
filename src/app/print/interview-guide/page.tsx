@@ -18,18 +18,41 @@ async function getWatermarkFlag(db: any) {
   }
 }
 
-function renderLines(content: string) {
-  const lines = content.split("\n");
+function extractInterviewGuide(docData: any): { mode: "text" | "structured"; text?: string; structured?: any } {
+  const candidate = docData?.content ?? docData?.guide ?? docData?.text ?? docData?.result ?? "";
+
+  if (typeof candidate === "string") return { mode: "text", text: candidate };
+
+  if (Array.isArray(candidate)) {
+    const joined = candidate.map((x) => (typeof x === "string" ? x : "")).filter(Boolean).join("\n");
+    return { mode: "text", text: joined };
+  }
+
+  if (candidate && typeof candidate === "object") {
+    // If it has a "text" field
+    if (typeof (candidate as any).text === "string") return { mode: "text", text: (candidate as any).text };
+
+    // If it has common sections arrays
+    if (Array.isArray((candidate as any).sections) || Array.isArray((candidate as any).questions)) {
+      return { mode: "structured", structured: candidate };
+    }
+
+    // last-resort: render JSON in readable way (not [object Object])
+    return { mode: "text", text: JSON.stringify(candidate, null, 2) };
+  }
+
+  return { mode: "text", text: "" };
+}
+
+function renderText(content: string) {
+  const lines = content.replace(/\r\n/g, "\n").split("\n");
   return lines.map((line, i) => {
     const t = line.trim();
     if (!t) return <div key={i} style={{ height: 8 }} />;
 
-    // Simple heading heuristic
     const isHeading =
       t.length < 70 &&
-      (t.endsWith(":") ||
-        t.toLowerCase().includes("section") ||
-        /^[0-9]+\./.test(t));
+      (t.endsWith(":") || t.toLowerCase().includes("section") || /^[0-9]+\./.test(t));
 
     if (isHeading) {
       return (
@@ -39,7 +62,6 @@ function renderLines(content: string) {
       );
     }
 
-    // Bullet heuristic
     if (t.startsWith("- ") || t.startsWith("• ")) {
       return (
         <ul key={i} style={{ marginTop: 6 }}>
@@ -50,6 +72,71 @@ function renderLines(content: string) {
 
     return <p key={i}>{t}</p>;
   });
+}
+
+function renderStructuredGuide(g: any) {
+  const nodes: JSX.Element[] = [];
+
+  // Sections style
+  if (Array.isArray(g.sections)) {
+    g.sections.forEach((s: any, idx: number) => {
+      const title = typeof s?.title === "string" ? s.title : `Section ${idx + 1}`;
+      nodes.push(
+        <div key={`sec-${idx}`} style={{ marginTop: 14 }}>
+          <b>{title}</b>
+        </div>
+      );
+
+      if (typeof s?.intro === "string" && s.intro.trim()) {
+        nodes.push(<p key={`sec-intro-${idx}`}>{s.intro.trim()}</p>);
+      }
+
+      if (Array.isArray(s?.bullets) && s.bullets.length) {
+        nodes.push(
+          <ul key={`sec-bul-${idx}`}>
+            {s.bullets.map((b: any, bi: number) => (
+              <li key={bi}>{typeof b === "string" ? b : JSON.stringify(b)}</li>
+            ))}
+          </ul>
+        );
+      }
+
+      if (Array.isArray(s?.questions) && s.questions.length) {
+        s.questions.forEach((q: any, qi: number) => {
+          const qText = typeof q?.q === "string" ? q.q : typeof q === "string" ? q : `Question ${qi + 1}`;
+          const aText = typeof q?.a === "string" ? q.a : "";
+
+          nodes.push(
+            <div key={`q-${idx}-${qi}`} style={{ marginTop: 10 }}>
+              <b>Q:</b> {qText}
+            </div>
+          );
+          if (aText) nodes.push(<p key={`a-${idx}-${qi}`}><b>A:</b> {aText}</p>);
+        });
+      }
+    });
+
+    return nodes;
+  }
+
+  // Flat questions style
+  if (Array.isArray(g.questions)) {
+    g.questions.forEach((q: any, qi: number) => {
+      const qText = typeof q?.q === "string" ? q.q : typeof q === "string" ? q : `Question ${qi + 1}`;
+      const aText = typeof q?.a === "string" ? q.a : "";
+
+      nodes.push(
+        <div key={`q-${qi}`} style={{ marginTop: 10 }}>
+          <b>Q:</b> {qText}
+        </div>
+      );
+      if (aText) nodes.push(<p key={`a-${qi}`}><b>A:</b> {aText}</p>);
+    });
+
+    return nodes;
+  }
+
+  return renderText(JSON.stringify(g, null, 2));
 }
 
 export default async function PrintInterviewGuidePage({
@@ -102,14 +189,15 @@ export default async function PrintInterviewGuidePage({
     );
   }
 
-  const content =
-    (docData.content || docData.guide || docData.text || "").toString();
+  const extracted = extractInterviewGuide(docData);
 
   return (
     <PrintLayout title="Interview Guide" watermarkEnabled={wmEnabled}>
       <h1>Interview Preparation Guide</h1>
       <div className="hr" />
-      {renderLines(content)}
+      {extracted.mode === "structured"
+        ? renderStructuredGuide(extracted.structured)
+        : renderText(extracted.text || "")}
     </PrintLayout>
   );
 }

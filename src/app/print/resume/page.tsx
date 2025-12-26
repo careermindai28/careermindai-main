@@ -64,7 +64,9 @@ export default async function PrintResumePage({
   const r = doc.result || {};
   const inputs = doc.inputs || {};
 
-  const headline = (r.headline || inputs.targetRole || "CareerMindAI Resume").toString();
+  // IMPORTANT: No Target Role / Region printed in the user PDF.
+  const headline = (r.headline || "CareerMindAI Resume").toString();
+
   const skills: string[] = Array.isArray(r.coreSkills) ? r.coreSkills : [];
   const tools: string[] = Array.isArray(r.toolsAndTech) ? r.toolsAndTech : [];
   const summary: string[] = Array.isArray(r.professionalSummary) ? r.professionalSummary : [];
@@ -78,11 +80,13 @@ export default async function PrintResumePage({
   return (
     <PrintLayout title="Resume" watermarkEnabled={wmEnabled}>
       <h1>{headline}</h1>
-      <div className="small">
-        Target Role: {(inputs.targetRole || "").toString()}
-        {inputs.companyName ? ` • Company: ${inputs.companyName}` : ""}
-        {inputs.region ? ` • Region: ${inputs.region}` : ""}
-      </div>
+
+      {/* Optional: If you want a subtle line, keep it generic (NOT internal inputs) */}
+      {inputs?.name && (
+        <div className="small" style={{ marginTop: 2 }}>
+          {(inputs.name || "").toString()}
+        </div>
+      )}
 
       <div className="hr" />
 
@@ -100,8 +104,16 @@ export default async function PrintResumePage({
       {(skills.length > 0 || tools.length > 0) && (
         <>
           <h2>Skills</h2>
-          {skills.length > 0 && <p><b>Core:</b> {skills.join(", ")}</p>}
-          {tools.length > 0 && <p><b>Tools:</b> {tools.join(", ")}</p>}
+          {skills.length > 0 && (
+            <p>
+              <b>Core:</b> {skills.join(", ")}
+            </p>
+          )}
+          {tools.length > 0 && (
+            <p>
+              <b>Tools:</b> {tools.join(", ")}
+            </p>
+          )}
         </>
       )}
 
@@ -144,7 +156,11 @@ export default async function PrintResumePage({
               ))}
             </ul>
           )}
-          {certs.length > 0 && <p><b>Certifications:</b> {certs.join(", ")}</p>}
+          {certs.length > 0 && (
+            <p>
+              <b>Certifications:</b> {certs.join(", ")}
+            </p>
+          )}
         </>
       )}
 

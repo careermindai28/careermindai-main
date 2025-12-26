@@ -18,6 +18,60 @@ async function getWatermarkFlag(db: any) {
   }
 }
 
+function extractCoverLetterText(docData: any): string {
+  // Common placements
+  const candidate =
+    docData?.content ??
+    docData?.coverLetter ??
+    docData?.text ??
+    docData?.result ??
+    "";
+
+  // string → return
+  if (typeof candidate === "string") return candidate;
+
+  // array of lines/paragraphs
+  if (Array.isArray(candidate)) {
+    return candidate.map((x) => (typeof x === "string" ? x : "")).filter(Boolean).join("\n");
+  }
+
+  // object → try common keys
+  if (candidate && typeof candidate === "object") {
+    const keys = ["letter", "body", "final", "content", "text", "coverLetter"];
+    for (const k of keys) {
+      const v = (candidate as any)[k];
+      if (typeof v === "string" && v.trim()) return v;
+      if (Array.isArray(v)) {
+        const joined = v.map((x) => (typeof x === "string" ? x : "")).filter(Boolean).join("\n");
+        if (joined.trim()) return joined;
+      }
+    }
+
+    // If your generator stored paragraphs in something like { paragraphs: [...] }
+    if (Array.isArray((candidate as any).paragraphs)) {
+      const joined = (candidate as any).paragraphs
+        .map((x: any) => (typeof x === "string" ? x : ""))
+        .filter(Boolean)
+        .join("\n");
+      if (joined.trim()) return joined;
+    }
+
+    // last-resort: pretty JSON (never [object Object])
+    return JSON.stringify(candidate, null, 2);
+  }
+
+  return "";
+}
+
+function renderParagraphs(text: string) {
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  return lines.map((line, i) => {
+    const t = line.trim();
+    if (!t) return <div key={i} style={{ height: 8 }} />;
+    return <p key={i}>{t}</p>;
+  });
+}
+
 export default async function PrintCoverLetterPage({
   searchParams,
 }: {
@@ -69,18 +123,13 @@ export default async function PrintCoverLetterPage({
     );
   }
 
-  const content =
-    (docData.content || docData.coverLetter || docData.text || "").toString();
+  const text = extractCoverLetterText(docData);
 
   return (
     <PrintLayout title="Cover Letter" watermarkEnabled={wmEnabled}>
       <h1>Cover Letter</h1>
       <div className="hr" />
-      {content
-        .split("\n")
-        .map((line: string, i: number) =>
-          line.trim() ? <p key={i}>{line}</p> : <div key={i} style={{ height: 8 }} />
-        )}
+      {renderParagraphs(text)}
     </PrintLayout>
   );
 }
