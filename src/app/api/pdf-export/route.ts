@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import chromium from "@sparticuz/chromium";
 import puppeteer from "puppeteer-core";
+import path from "path";
 import { signPdfUrl } from "@/lib/pdfSign";
 
 export const runtime = "nodejs";
@@ -19,7 +20,7 @@ function safeFilename(type: PdfType) {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
 
     const type = mustString(body?.type) as PdfType;
     const id = mustString(body?.id);
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
     if (!baseUrl) {
       return new Response(JSON.stringify({ ok: false, error: "Missing NEXT_PUBLIC_APP_URL" }), {
         status: 500,
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // signed URL valid for 5 minutes
+    // Signed URL valid for 5 minutes
     const exp = Math.floor(Date.now() / 1000) + 300;
     const sig = signPdfUrl({ type, id, exp });
 
@@ -57,35 +58,37 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const executablePath = await chromium.executablePath();
+    /**
+     * IMPORTANT:
+     * Vercel sometimes prunes node_modules. We will:
+     * 1) force-include chromium bin via next.config.mjs (see below)
+     * 2) pass inputDir explicitly to chromium.executablePath()
+     */
+    const inputDir = path.join(process.cwd(), "node_modules", "@sparticuz", "chromium", "bin");
+    const executablePath = await chromium.executablePath(inputDir);
 
-const browser = await puppeteer.launch({
-  args: [...chromium.args, "--font-render-hinting=medium"],
-  executablePath,
-  headless: true,
-});
-
+    const browser = await puppeteer.launch({
+      args: [...chromium.args, "--no-sandbox", "--disable-setuid-sandbox"],
+      executablePath,
+      headless: true,
+    });
 
     try {
       const page = await browser.newPage();
 
-      // better rendering consistency
+      // Consistent rendering
       await page.setViewport({ width: 1240, height: 1754, deviceScaleFactor: 1 });
-
       await page.goto(printUrl, { waitUntil: "networkidle2", timeout: 60_000 });
 
-      // quick guard: if print route rendered an auth/error page
+      // Guard: if print route returned an error page
       const html = await page.content();
-      if (
-        html.toLowerCase().includes("unauthorized") ||
-        html.toLowerCase().includes("not found") ||
-        html.toLowerCase().includes("forbidden")
-      ) {
+      const lower = html.toLowerCase();
+      if (lower.includes("unauthorized") || lower.includes("forbidden") || lower.includes("not found")) {
         return new Response(
           JSON.stringify({
             ok: false,
-            error: "Print page returned Unauthorized/Not Found/Forbidden",
-            debug: { printUrl, htmlSnippet: html.slice(0, 400) },
+            error: "Print page returned Unauthorized/Forbidden/Not Found",
+            debug: { printUrl, htmlSnippet: html.slice(0, 500) },
           }),
           { status: 403, headers: { "Content-Type": "application/json" } }
         );
@@ -106,7 +109,6 @@ const browser = await puppeteer.launch({
           </div>`,
       });
 
-      // ✅ TS-safe body type
       return new Response(new Uint8Array(pdfBuffer), {
         status: 200,
         headers: {
