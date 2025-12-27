@@ -11,7 +11,9 @@ interface PublicHeaderProps {
 
 const PublicHeader = ({ className = '' }: PublicHeaderProps) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { user } = useAuth();
+
+  // ✅ use loading as well (your AuthProvider already exposes it)
+  const { user, loading } = useAuth(); // AuthProvider provides loading :contentReference[oaicite:6]{index=6}
 
   const navigationItems = [
     { label: 'Home', path: '/landing-page' },
@@ -19,11 +21,19 @@ const PublicHeader = ({ className = '' }: PublicHeaderProps) => {
     { label: 'Free Tools', path: '/free-tools-hub' },
   ];
 
-  const primaryCtaHref = user ? '/dashboard' : '/landing-page#get-started';
-  const primaryCtaLabel = user ? 'Go to Dashboard' : 'Get Started';
+  // ✅ Real dashboard route in your repo
+  const DASHBOARD_PATH = '/user-dashboard'; // exists :contentReference[oaicite:7]{index=7}
 
-  const secondaryCtaHref = user ? '/dashboard' : '/landing-page#get-started';
-  const secondaryCtaLabel = user ? 'Dashboard' : 'Login';
+  // ✅ Since you DO NOT have /login route, your "login" is currently the Google section on landing page.
+  const LOGIN_ENTRY = '/sign-in'; // GoogleAuthSection lives on landing page :contentReference[oaicite:8]{index=8}
+
+  // ✅ Never send user to dashboard while loading auth state
+  const primaryCtaHref = loading ? LOGIN_ENTRY : user ? '/user-dashboard' : LOGIN_ENTRY;
+  const primaryCtaLabel = loading ? 'Loading…' : user ? 'Go to Dashboard' : 'Get Started';
+
+  // ✅ Keep "Login" meaningful: it should take you to the Google auth section, not dashboard
+  const secondaryCtaHref = loading ? LOGIN_ENTRY : user ? '/user-dashboard' : LOGIN_ENTRY;
+  const secondaryCtaLabel = loading ? 'Login' : user ? 'Dashboard' : 'Login';
 
   const toggleMobileMenu = () => setIsMobileMenuOpen((v) => !v);
 
@@ -33,14 +43,7 @@ const PublicHeader = ({ className = '' }: PublicHeaderProps) => {
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center">
             <Link href="/landing-page" className="flex items-center space-x-2">
-              <svg
-                width="32"
-                height="32"
-                viewBox="0 0 32 32"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                className="text-primary"
-              >
+              <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-primary">
                 <rect width="32" height="32" rx="6" fill="currentColor" />
                 <path d="M16 8L8 14V24H12V18H20V24H24V14L16 8Z" fill="white" />
               </svg>
@@ -64,12 +67,21 @@ const PublicHeader = ({ className = '' }: PublicHeaderProps) => {
             <Link
               href={secondaryCtaHref}
               className="text-text-secondary hover:text-foreground transition-colors duration-150 font-medium"
+              aria-disabled={loading}
+              onClick={(e) => {
+                if (loading) e.preventDefault();
+              }}
             >
               {secondaryCtaLabel}
             </Link>
+
             <Link
               href={primaryCtaHref}
               className="bg-accent hover:bg-accent/90 text-accent-foreground px-6 py-2 rounded-lg font-medium transition-all duration-150 shadow-card hover:shadow-elevation"
+              aria-disabled={loading}
+              onClick={(e) => {
+                if (loading) e.preventDefault();
+              }}
             >
               {primaryCtaLabel}
             </Link>
@@ -80,11 +92,7 @@ const PublicHeader = ({ className = '' }: PublicHeaderProps) => {
             className="md:hidden p-2 rounded-lg hover:bg-muted transition-colors duration-150"
             aria-label="Toggle mobile menu"
           >
-            <Icon
-              name={isMobileMenuOpen ? 'XMarkIcon' : 'Bars3Icon'}
-              size={24}
-              className="text-foreground"
-            />
+            <Icon name={isMobileMenuOpen ? 'XMarkIcon' : 'Bars3Icon'} size={24} className="text-foreground" />
           </button>
         </div>
       </div>
@@ -102,18 +110,22 @@ const PublicHeader = ({ className = '' }: PublicHeaderProps) => {
                 {item.label}
               </Link>
             ))}
+
             <div className="pt-3 border-t border-border space-y-3">
               <Link
                 href={secondaryCtaHref}
                 className="block py-2 text-text-secondary hover:text-foreground transition-colors duration-150 font-medium"
                 onClick={() => setIsMobileMenuOpen(false)}
+                aria-disabled={loading}
               >
                 {secondaryCtaLabel}
               </Link>
+
               <Link
                 href={primaryCtaHref}
                 className="block bg-accent hover:bg-accent/90 text-accent-foreground px-6 py-2 rounded-lg font-medium text-center transition-all duration-150"
                 onClick={() => setIsMobileMenuOpen(false)}
+                aria-disabled={loading}
               >
                 {primaryCtaLabel}
               </Link>

@@ -54,6 +54,7 @@ export function getFirebaseDb(): Firestore {
 }
 
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 // For convenience, also export top-level singletons used in existing components
 export const auth = getFirebaseAuth();
