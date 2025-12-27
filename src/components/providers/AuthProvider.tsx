@@ -1,8 +1,8 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, onAuthStateChanged } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { User, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'firebase/auth';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { isFirebaseReady, getFirebaseAuth, getFirebaseDb } from '@/lib/firebaseClient';
 
 interface AuthContextType {
@@ -17,71 +17,81 @@ const AuthContext = createContext<AuthContextType>({
   firebaseReady: false,
 });
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
-  return context;
-};
+export const useAuth = () => useContext(AuthContext);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [firebaseReady] = useState(isFirebaseReady());
+
+  // evaluate once
+  const firebaseReady = useMemo(() => isFirebaseReady(), []);
 
   useEffect(() => {
-    // If Firebase is not ready, set loading to false and return
     if (!firebaseReady) {
       console.warn('⚠️ Firebase not configured. Auth features disabled.');
       setLoading(false);
       return;
     }
 
-    try {
-      const auth = getFirebaseAuth();
-      const db = getFirebaseDb();
+    let unsub: (() => void) | null = null;
 
-      const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-        setUser(firebaseUser);
+    (async () => {
+      try {
+        const auth = getFirebaseAuth();
+        const db = getFirebaseDb();
 
-        if (firebaseUser) {
-          try {
-            // Create or update user document in Firestore
-            const userRef = doc(db, 'users', firebaseUser.uid);
-            await setDoc(
-              userRef,
-              {
-                uid: firebaseUser.uid,
-                email: firebaseUser.email,
-                displayName: firebaseUser.displayName,
-                photoURL: firebaseUser.photoURL,
-                lastLoginAt: serverTimestamp(),
-              },
-              { merge: true }
-            );
+        // ✅ Critical: keep session on navigation/reload
+        await setPersistence(auth, browserLocalPersistence);
 
-            // Set createdAt only on first creation
-            await setDoc(
-              userRef,
-              {
-                createdAt: serverTimestamp(),
-              },
-              { merge: true, mergeFields: ['createdAt'] }
-            );
-          } catch (error) {
-            console.error('Error updating user document:', error);
+        unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+          setUser(firebaseUser);
+
+          if (firebaseUser) {
+            try {
+              const userRef = doc(db, 'users', firebaseUser.uid);
+              const snap = await getDoc(userRef);
+
+              if (!snap.exists()) {
+                await setDoc(
+                  userRef,
+                  {
+                    uid: firebaseUser.uid,
+                    email: firebaseUser.email ?? null,
+                    displayName: firebaseUser.displayName ?? null,
+                    photoURL: firebaseUser.photoURL ?? null,
+                    createdAt: serverTimestamp(),
+                    lastLoginAt: serverTimestamp(),
+                  },
+                  { merge: true }
+                );
+              } else {
+                await setDoc(
+                  userRef,
+                  {
+                    email: firebaseUser.email ?? null,
+                    displayName: firebaseUser.displayName ?? null,
+                    photoURL: firebaseUser.photoURL ?? null,
+                    lastLoginAt: serverTimestamp(),
+                  },
+                  { merge: true }
+                );
+              }
+            } catch (err) {
+              console.error('Error updating user doc:', err);
+            }
           }
-        }
 
+          setLoading(false);
+        });
+      } catch (err) {
+        console.error('Error setting up auth listener:', err);
         setLoading(false);
-      });
+      }
+    })();
 
-      return () => unsubscribe();
-    } catch (error) {
-      console.error('Error setting up auth listener:', error);
-      setLoading(false);
-    }
+    return () => {
+      if (unsub) unsub();
+    };
   }, [firebaseReady]);
 
   return (

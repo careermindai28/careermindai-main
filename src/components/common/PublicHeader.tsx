@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import Icon from '@/components/ui/AppIcon';
+import { useAuth } from '@/components/providers/AuthProvider';
 
 interface PublicHeaderProps {
   className?: string;
@@ -10,6 +11,7 @@ interface PublicHeaderProps {
 
 const PublicHeader = ({ className = '' }: PublicHeaderProps) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { user } = useAuth();
 
   const navigationItems = [
     { label: 'Home', path: '/landing-page' },
@@ -17,9 +19,13 @@ const PublicHeader = ({ className = '' }: PublicHeaderProps) => {
     { label: 'Free Tools', path: '/free-tools-hub' },
   ];
 
-  const toggleMobileMenu = () => {
-    setIsMobileMenuOpen(!isMobileMenuOpen);
-  };
+  const primaryCtaHref = user ? '/dashboard' : '/landing-page#get-started';
+  const primaryCtaLabel = user ? 'Go to Dashboard' : 'Get Started';
+
+  const secondaryCtaHref = user ? '/dashboard' : '/landing-page#get-started';
+  const secondaryCtaLabel = user ? 'Dashboard' : 'Login';
+
+  const toggleMobileMenu = () => setIsMobileMenuOpen((v) => !v);
 
   return (
     <header className={`bg-surface border-b border-border sticky top-0 z-1000 ${className}`}>
@@ -36,14 +42,9 @@ const PublicHeader = ({ className = '' }: PublicHeaderProps) => {
                 className="text-primary"
               >
                 <rect width="32" height="32" rx="6" fill="currentColor" />
-                <path
-                  d="M16 8L8 14V24H12V18H20V24H24V14L16 8Z"
-                  fill="white"
-                />
+                <path d="M16 8L8 14V24H12V18H20V24H24V14L16 8Z" fill="white" />
               </svg>
-              <span className="text-xl font-semibold text-foreground">
-                CareerMindAI
-              </span>
+              <span className="text-xl font-semibold text-foreground">CareerMindAI</span>
             </Link>
           </div>
 
@@ -61,16 +62,16 @@ const PublicHeader = ({ className = '' }: PublicHeaderProps) => {
 
           <div className="hidden md:flex items-center space-x-4">
             <Link
-              href="/landing-page#get-started"
+              href={secondaryCtaHref}
               className="text-text-secondary hover:text-foreground transition-colors duration-150 font-medium"
             >
-              Login
+              {secondaryCtaLabel}
             </Link>
             <Link
-              href="/landing-page#get-started"
+              href={primaryCtaHref}
               className="bg-accent hover:bg-accent/90 text-accent-foreground px-6 py-2 rounded-lg font-medium transition-all duration-150 shadow-card hover:shadow-elevation"
             >
-              Get Started
+              {primaryCtaLabel}
             </Link>
           </div>
 
@@ -103,18 +104,18 @@ const PublicHeader = ({ className = '' }: PublicHeaderProps) => {
             ))}
             <div className="pt-3 border-t border-border space-y-3">
               <Link
-                href="/landing-page#get-started"
+                href={secondaryCtaHref}
                 className="block py-2 text-text-secondary hover:text-foreground transition-colors duration-150 font-medium"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                Login
+                {secondaryCtaLabel}
               </Link>
               <Link
-                href="/landing-page#get-started"
+                href={primaryCtaHref}
                 className="block bg-accent hover:bg-accent/90 text-accent-foreground px-6 py-2 rounded-lg font-medium text-center transition-all duration-150"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                Get Started
+                {primaryCtaLabel}
               </Link>
             </div>
           </div>
