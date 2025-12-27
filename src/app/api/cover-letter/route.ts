@@ -5,6 +5,8 @@ import { getFirestore } from "@/lib/firebaseAdmin";
 
 export const runtime = "nodejs";
 
+/* ---------------- utils ---------------- */
+
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
@@ -12,6 +14,47 @@ function jsonError(message: string, status = 400) {
 function getGuestSessionId(req: NextRequest) {
   return req.cookies.get("guestSessionId")?.value || "";
 }
+
+/**
+ * Resolve candidate name in priority order:
+ * 1) Explicit name saved in builder inputs
+ * 2) Parsed resume name (if available)
+ * 3) Fallback
+ */
+function resolveCandidateName(builder: any): string {
+  const fromInputs = builder?.inputs?.name;
+  if (typeof fromInputs === "string" && fromInputs.trim()) {
+    return fromInputs.trim();
+  }
+
+  const fromResume =
+    builder?.result?.name ||
+    builder?.result?.personalInfo?.name ||
+    builder?.result?.header?.name;
+
+  if (typeof fromResume === "string" && fromResume.trim()) {
+    return fromResume.trim();
+  }
+
+  return "Candidate";
+}
+
+/**
+ * Replace common name placeholders safely
+ */
+function injectCandidateName(text: string, name: string): string {
+  if (!text) return text;
+
+  return text
+    .replace(/\[your name\]/gi, name)
+    .replace(/\{\{\s*name\s*\}\}/gi, name)
+    .replace(/\{\s*name\s*\}/gi, name)
+    .replace(/<<\s*name\s*>>/gi, name)
+    .replace(/\(your name\)/gi, name)
+    .replace(/your name/gi, name);
+}
+
+/* ---------------- handler ---------------- */
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,11 +77,16 @@ export async function POST(req: NextRequest) {
     // ownership check (guest)
     if (builder?.ownerType === "guest") {
       if (!guestSessionId) return jsonError("Missing guest session.", 401);
-      if (builder?.ownerId !== guestSessionId) return jsonError("Unauthorized builderId.", 403);
+      if (builder?.ownerId !== guestSessionId)
+        return jsonError("Unauthorized builderId.", 403);
     }
 
     const resume = builder?.result;
     if (!resume) return jsonError("Resume result missing in builder.", 400);
+
+    const candidateName = resolveCandidateName(builder);
+
+    /* --------- AI prompt --------- */
 
     const system =
       "You are a world-class cover letter writer. Output ONLY JSON (single object), no markdown. " +
@@ -49,14 +97,19 @@ export async function POST(req: NextRequest) {
 RESUME JSON:
 ${JSON.stringify(resume).slice(0, 12000)}
 
-TONE: ${tone}
+CANDIDATE NAME:
+${candidateName}
+
+TONE:
+${tone}
+
 JOB DESCRIPTION (optional):
 ${jobDescription || "N/A"}
 
 Return JSON:
 {
   "subjectLine": "string",
-  "letter": "string (multi-paragraph with \\n\\n)",
+  "letter": "string (multi-paragraph with \\n\\n, do NOT use placeholders)",
   "highlights": ["3-5 bullets of strongest matching points"]
 }
 `.trim();
@@ -74,14 +127,33 @@ Return JSON:
     const raw = completion.choices?.[0]?.message?.content;
     if (!raw) return jsonError("No response from AI.", 500);
 
-    let content: any;
+    let parsed: any;
     try {
-      content = JSON.parse(raw);
+      parsed = JSON.parse(raw);
     } catch {
       return jsonError("AI returned invalid JSON.", 500);
     }
 
+    /* --------- sanitize output --------- */
+
+    const cleanContent = {
+      subjectLine: injectCandidateName(
+        String(parsed.subjectLine || "").trim(),
+        candidateName
+      ),
+      letter: injectCandidateName(
+        String(parsed.letter || "").trim(),
+        candidateName
+      ),
+      highlights: Array.isArray(parsed.highlights)
+        ? parsed.highlights.map((x: any) => String(x))
+        : [],
+    };
+
+    /* --------- persist --------- */
+
     const coverLetterId = crypto.randomUUID();
+
     await db.collection("coverLetters").doc(coverLetterId).set({
       coverLetterId,
       builderId,
@@ -90,11 +162,25 @@ Return JSON:
       createdAt: new Date(),
       tone,
       jobDescription: jobDescription || null,
-      content,
+
+      // what UI + PDF use
+      content: cleanContent,
+
+      // backend-only debug (never show in UI)
+      debug: {
+        rawModelOutput: parsed,
+        model: DEFAULT_MODEL,
+      },
     });
 
-    return NextResponse.json({ ok: true, builderId, coverLetterId, content }, { status: 200 });
+    return NextResponse.json(
+      { ok: true, builderId, coverLetterId, content: cleanContent },
+      { status: 200 }
+    );
   } catch (e: any) {
-    return jsonError(typeof e?.message === "string" ? e.message : "Cover letter failed.", 500);
+    return jsonError(
+      typeof e?.message === "string" ? e.message : "Cover letter failed.",
+      500
+    );
   }
 }
