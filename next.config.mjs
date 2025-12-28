@@ -22,14 +22,18 @@ const nextConfig = {
     return [{ source: "/", destination: "/landing-page", permanent: false }];
   },
 
-  webpack(config) {
+ webpack(config, { dev }) {
+  // ✅ Only enable rocket/dhiwise component tagging in development
+  if (dev) {
     config.module.rules.push({
       test: /\.(jsx|tsx)$/,
       exclude: [/node_modules/],
       use: [{ loader: "@dhiwise/component-tagger/nextLoader" }],
     });
-    return config;
-  },
+  }
+
+  return config;
+},
 
   /**
    * ✅ For server-side PDF export on Vercel (Next 14 supports this)
