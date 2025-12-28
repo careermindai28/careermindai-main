@@ -1,6 +1,7 @@
 "use client";
 
 import dynamicImport from "next/dynamic";
+import ClientErrorBoundary from "@/components/common/ClientErrorBoundary";
 
 export const dynamic = "force-dynamic";
 
@@ -10,5 +11,9 @@ const ResumeAuditInteractive = dynamicImport(
 );
 
 export default function Page() {
-  return <ResumeAuditInteractive />;
+  return (
+    <ClientErrorBoundary label="Resume Audit Tool">
+      <ResumeAuditInteractive />
+    </ClientErrorBoundary>
+  );
 }
