@@ -1,13 +1,8 @@
 type PdfType = "resume" | "coverLetter" | "interviewGuide";
 
-export type DownloadPdfResult =
+type DownloadResult =
   | { ok: true }
-  | {
-      ok: false;
-      code: "UNAUTHORIZED" | "EXPORT_LIMIT_REACHED" | "FAILED";
-      message: string;
-      status?: number;
-    };
+  | { ok: false; code: "EXPORT_LIMIT_REACHED" | "UNAUTHORIZED" | "FAILED"; message: string };
 
 export async function downloadPdf(
   type: PdfType,
@@ -17,52 +12,38 @@ export async function downloadPdf(
     onDone?: () => void;
     onError?: (msg: string) => void;
   }
-): Promise<DownloadPdfResult> {
+): Promise<DownloadResult> {
   try {
     opts?.onStart?.();
 
-    // ✅ Lazy import to avoid server-side bundling issues
-    const { getFirebaseAuth } = await import("@/lib/firebaseClient");
-    const auth = getFirebaseAuth();
-    const user = auth.currentUser;
-
-    if (!user) {
-      const msg = "Please sign in to export PDFs.";
-      opts?.onError?.(msg);
-      return { ok: false, code: "UNAUTHORIZED", message: msg, status: 401 };
-    }
-
-    const token = await user.getIdToken();
-
     const res = await fetch("/api/pdf-export", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`, // ✅ REQUIRED by your API
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type, id }),
     });
 
+    // Handle monetization responses cleanly
     if (res.status === 402) {
-      const data = await res.json().catch(() => null);
-      const msg =
-        data?.error ||
-        "Daily export limit reached. Upgrade to export unlimited PDFs.";
-      opts?.onError?.(msg);
-      return { ok: false, code: "EXPORT_LIMIT_REACHED", message: msg, status: 402 };
+      const txt = await res.text().catch(() => "");
+      return {
+        ok: false,
+        code: "EXPORT_LIMIT_REACHED",
+        message: txt || "Daily export limit reached. Please upgrade.",
+      };
     }
 
-    if (res.status === 401) {
-      const msg = "Unauthorized. Please sign in again.";
-      opts?.onError?.(msg);
-      return { ok: false, code: "UNAUTHORIZED", message: msg, status: 401 };
+    if (res.status === 401 || res.status === 403) {
+      const txt = await res.text().catch(() => "");
+      return {
+        ok: false,
+        code: "UNAUTHORIZED",
+        message: txt || "Unauthorized. Please sign in again.",
+      };
     }
 
     if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      const msg = data?.error || "PDF export failed";
-      opts?.onError?.(msg);
-      return { ok: false, code: "FAILED", message: msg, status: res.status };
+      const txt = await res.text().catch(() => "");
+      return { ok: false, code: "FAILED", message: txt || "PDF export failed" };
     }
 
     const blob = await res.blob();

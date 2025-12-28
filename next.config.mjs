@@ -32,19 +32,10 @@ const nextConfig = {
   },
 
   /**
-   * ✅ CRITICAL for server-side PDF export on Vercel:
-   * Ensure puppeteer-core + sparticuz chromium + its bin files are bundled.
+   * ✅ For server-side PDF export on Vercel (Next 14 supports this)
    */
   experimental: {
     serverComponentsExternalPackages: ["puppeteer-core", "@sparticuz/chromium"],
-  },
-
-  outputFileTracingIncludes: {
-    // This key MUST match the route handler bundle path
-    "app/api/pdf-export/route": [
-      "./node_modules/@sparticuz/chromium/bin/**",
-      "./node_modules/@sparticuz/chromium/**",
-    ],
   },
 };
 
