@@ -1,19 +1,8 @@
-"use client";
-
-import dynamicImport from "next/dynamic";
-import ClientErrorBoundary from "@/components/common/ClientErrorBoundary";
+import ClientPage from "./ClientPage";
 
 export const dynamic = "force-dynamic";
-
-const ResumeAuditInteractive = dynamicImport(
-  () => import("./components/ResumeAuditInteractive"),
-  { ssr: false }
-);
+export const revalidate = 0;
 
 export default function Page() {
-  return (
-    <ClientErrorBoundary label="Resume Audit Tool">
-      <ResumeAuditInteractive />
-    </ClientErrorBoundary>
-  );
+  return <ClientPage />;
 }
