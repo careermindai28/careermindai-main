@@ -31,7 +31,7 @@
 
   /* Watermark */
   body::after {
-    content: var(--pdf-watermark, "CareerMindAI");
+    content: var(--pdf-watermark, "CareerMindAI • Free Version");
     position: fixed;
     top: 45%;
     left: 50%;

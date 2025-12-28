@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Icon from '@/components/ui/AppIcon';
-import LogoutButton from '@/components/auth/LogoutButton';
+import { logoutUser } from '@/lib/logout';
 
 interface DashboardSidebarProps {
   isCollapsed?: boolean;
@@ -27,94 +27,60 @@ const DashboardSidebar = ({ isCollapsed = false, className = '' }: DashboardSide
   const pathname = usePathname();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(isCollapsed);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const navigationSections: NavigationSection[] = [
     {
       title: 'Overview',
       items: [
-        {
-          label: 'Dashboard',
-          path: '/user-dashboard',
-          icon: 'HomeIcon',
-          tooltip: 'Your career development hub',
-        },
+        { label: 'Dashboard', path: '/user-dashboard', icon: 'HomeIcon', tooltip: 'Your career development hub' },
       ],
     },
     {
       title: 'Career Tools',
       items: [
-        {
-          label: 'Resume Audit',
-          path: '/resume-audit-tool',
-          icon: 'DocumentMagnifyingGlassIcon',
-          tooltip: 'Analyze and improve your resume',
-        },
-        {
-          label: 'AI Resume Builder',
-          path: '/ai-resume-builder',
-          icon: 'DocumentTextIcon',
-          tooltip: 'Create optimized resumes',
-        },
-        {
-          label: 'Cover Letter',
-          path: '/cover-letter-generator',
-          icon: 'DocumentIcon',
-          tooltip: 'Generate tailored cover letters',
-        },
-        {
-          label: 'Interview Prep',
-          path: '/interview-preparation',
-          icon: 'ChatBubbleLeftRightIcon',
-          tooltip: 'Practice interview questions',
-        },
-        {
-          label: 'LinkedIn Optimizer',
-          path: '/linked-in-optimization',
-          icon: 'UserCircleIcon',
-          tooltip: 'Enhance your LinkedIn profile',
-        },
+        { label: 'Resume Audit', path: '/resume-audit-tool', icon: 'DocumentMagnifyingGlassIcon', tooltip: 'Analyze and improve your resume' },
+        { label: 'AI Resume Builder', path: '/ai-resume-builder', icon: 'DocumentTextIcon', tooltip: 'Create optimized resumes' },
+        { label: 'Cover Letter', path: '/cover-letter-generator', icon: 'DocumentIcon', tooltip: 'Generate tailored cover letters' },
+        { label: 'Interview Prep', path: '/interview-preparation', icon: 'ChatBubbleLeftRightIcon', tooltip: 'Practice interview questions' },
+        { label: 'LinkedIn Optimizer', path: '/linked-in-optimization', icon: 'UserCircleIcon', tooltip: 'Enhance your LinkedIn profile' },
       ],
     },
     {
       title: 'Resources',
       items: [
-        {
-          label: 'Free Tools',
-          path: '/free-tools-hub',
-          icon: 'WrenchScrewdriverIcon',
-          tooltip: 'Access free career utilities',
-        },
+        { label: 'Free Tools', path: '/free-tools-hub', icon: 'WrenchScrewdriverIcon', tooltip: 'Access free career utilities' },
       ],
     },
     {
       title: 'Account',
       items: [
-        {
-          label: 'Settings',
-          path: '/user-settings',
-          icon: 'Cog6ToothIcon',
-          tooltip: 'Manage your account',
-        },
+        { label: 'Settings', path: '/user-settings', icon: 'Cog6ToothIcon', tooltip: 'Manage your account' },
       ],
     },
   ];
 
-  const isActiveRoute = (path: string) => {
-    return pathname === path;
-  };
+  const isActiveRoute = (path: string) => pathname === path;
 
-  const toggleMobileSidebar = () => {
-    setIsMobileOpen(!isMobileOpen);
-  };
+  const toggleMobileSidebar = () => setIsMobileOpen((v) => !v);
+  const toggleCollapse = () => setCollapsed((v) => !v);
 
-  const toggleCollapse = () => {
-    setCollapsed(!collapsed);
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    setIsMobileOpen(false); // prevent accidental clicks during transition
+    try {
+      await logoutUser(); // hard redirect to /sign-in (as you created)
+    } finally {
+      // If redirect is blocked for some reason, re-enable UI.
+      setIsLoggingOut(false);
+    }
   };
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between p-4 border-b border-border">
-        <Link href="/user-dashboard" className="flex items-center space-x-2">
+        <Link href="/user-dashboard" className="flex items-center space-x-2" onClick={() => setIsMobileOpen(false)}>
           <svg
             width="32"
             height="32"
@@ -124,17 +90,13 @@ const DashboardSidebar = ({ isCollapsed = false, className = '' }: DashboardSide
             className="text-primary flex-shrink-0"
           >
             <rect width="32" height="32" rx="6" fill="currentColor" />
-            <path
-              d="M16 8L8 14V24H12V18H20V24H24V14L16 8Z"
-              fill="white"
-            />
+            <path d="M16 8L8 14V24H12V18H20V24H24V14L16 8Z" fill="white" />
           </svg>
           {!collapsed && (
-            <span className="text-lg font-semibold text-foreground">
-              CareerMindAI
-            </span>
+            <span className="text-lg font-semibold text-foreground">CareerMindAI</span>
           )}
         </Link>
+
         <button
           onClick={toggleCollapse}
           className="hidden lg:block p-1 rounded hover:bg-muted transition-colors duration-150"
@@ -148,7 +110,7 @@ const DashboardSidebar = ({ isCollapsed = false, className = '' }: DashboardSide
         </button>
       </div>
 
-      <nav className="flex-1 overflow-y-auto py-4 px-2">
+      <nav className={`flex-1 overflow-y-auto py-4 px-2 ${isLoggingOut ? 'pointer-events-none opacity-60' : ''}`}>
         {navigationSections.map((section, sectionIndex) => (
           <div key={sectionIndex} className="mb-6">
             {!collapsed && (
@@ -178,9 +140,7 @@ const DashboardSidebar = ({ isCollapsed = false, className = '' }: DashboardSide
                         isActive ? 'text-primary-foreground' : 'text-text-secondary group-hover:text-foreground'
                       }`}
                     />
-                    {!collapsed && (
-                      <span className="font-medium">{item.label}</span>
-                    )}
+                    {!collapsed && <span className="font-medium">{item.label}</span>}
                   </Link>
                 );
               })}
@@ -201,11 +161,19 @@ const DashboardSidebar = ({ isCollapsed = false, className = '' }: DashboardSide
             </div>
           )}
         </div>
-        {!collapsed && (
-          <div className="flex justify-center">
-            <LogoutButton />
-          </div>
-        )}
+
+        {/* ✅ Logout available even when collapsed (icon-only) */}
+        <button
+          onClick={handleLogout}
+          disabled={isLoggingOut}
+          className={`w-full flex items-center ${collapsed ? 'justify-center' : 'justify-center'} gap-2 px-4 py-2 rounded-lg
+            border border-border hover:bg-muted transition-colors duration-150 disabled:opacity-60`}
+          aria-label="Logout"
+          title={collapsed ? 'Logout' : undefined}
+        >
+          <Icon name="ArrowRightOnRectangleIcon" size={18} className="text-text-secondary" />
+          {!collapsed && <span className="text-sm font-medium text-text-secondary">{isLoggingOut ? 'Logging out…' : 'Logout'}</span>}
+        </button>
       </div>
     </div>
   );

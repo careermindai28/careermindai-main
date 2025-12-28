@@ -26,10 +26,7 @@ export default function PrintLayout({
             print-color-adjust: exact;
             background: #fff;
           }
-          .page {
-            position: relative;
-            min-height: 100%;
-          }
+          .page { position: relative; min-height: 100%; }
           .wm {
             position: fixed;
             inset: 0;
@@ -40,41 +37,22 @@ export default function PrintLayout({
             z-index: 0;
           }
           .wm span {
-            transform: rotate(-28deg);
-            font-size: 72px;
-            font-weight: 800;
-            letter-spacing: 2px;
-            color: rgba(17, 24, 39, 0.07); /* subtle watermark */
-            user-select: none;
-            white-space: nowrap;
+             transform: rotate(-30deg);
+             font-size: 48px;
+              font-weight: 700;
+              letter-spacing: 1.5px;
+              color: rgba(17, 24, 39, 0.06);
+              user-select: none;
+              white-space: nowrap;
           }
-          .content {
-            position: relative;
-            z-index: 1;
-          }
-          h1 { font-size: 20px; margin: 0 0 10px; }
-          h2 { font-size: 14px; margin: 14px 0 8px; }
-          p  { margin: 0 0 8px; }
-          ul { margin: 6px 0 10px 18px; padding: 0; }
-          li { margin: 0 0 6px; }
-          .hr { height: 1px; background: #e5e7eb; margin: 10px 0 12px; }
-          .muted { color: #6b7280; font-size: 11.5px; }
-          .badge {
-            display: inline-block;
-            padding: 4px 8px;
-            border: 1px solid #e5e7eb;
-            border-radius: 999px;
-            font-size: 11px;
-            color: #374151;
-            background: #f9fafb;
-          }
+          .content { position: relative; z-index: 1; }
         `}</style>
       </head>
       <body>
         <div className="page">
           {watermarkEnabled && (
             <div className="wm">
-              <span>CareerMindAI</span>
+              <span>{(typeof window !== "undefined" && getComputedStyle(document.documentElement).getPropertyValue("--pdf-watermark").trim()) || "CareerMindAI"}</span>
             </div>
           )}
           <div className="content">{children}</div>

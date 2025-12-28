@@ -19,14 +19,22 @@ async function getWatermarkFlag(db: any) {
   }
 }
 
+function parseWm(v: string | undefined) {
+  const s = (v || "").trim();
+  if (s === "0") return false;
+  if (s === "1") return true;
+  return null; // not provided
+}
+
 export default async function PrintResumePage({
   searchParams,
 }: {
-  searchParams: { builderId?: string; sig?: string; exp?: string };
+  searchParams: { builderId?: string; sig?: string; exp?: string; wm?: string };
 }) {
   const builderId = (searchParams.builderId || "").trim();
   const sig = (searchParams.sig || "").trim();
   const exp = mustInt(searchParams.exp || null);
+  const wmRequested = parseWm(searchParams.wm);
 
   if (!builderId || !sig || !exp) {
     return (
@@ -48,7 +56,11 @@ export default async function PrintResumePage({
   }
 
   const db = getFirestore();
-  const wmEnabled = await getWatermarkFlag(db);
+  const configWmEnabled = await getWatermarkFlag(db);
+
+  // ✅ If wm=0 => always off. If wm=1 => on only if config allows it.
+  const wmEnabled =
+    wmRequested === null ? configWmEnabled : wmRequested && configWmEnabled;
 
   const snap = await db.collection("builders").doc(builderId).get();
   if (!snap.exists) {
@@ -64,7 +76,6 @@ export default async function PrintResumePage({
   const r = doc.result || {};
   const inputs = doc.inputs || {};
 
-  // IMPORTANT: No Target Role / Region printed in the user PDF.
   const headline = (r.headline || "CareerMindAI Resume").toString();
 
   const skills: string[] = Array.isArray(r.coreSkills) ? r.coreSkills : [];
@@ -81,7 +92,6 @@ export default async function PrintResumePage({
     <PrintLayout title="Resume" watermarkEnabled={wmEnabled}>
       <h1>{headline}</h1>
 
-      {/* Optional: If you want a subtle line, keep it generic (NOT internal inputs) */}
       {inputs?.name && (
         <div className="small" style={{ marginTop: 2 }}>
           {(inputs.name || "").toString()}

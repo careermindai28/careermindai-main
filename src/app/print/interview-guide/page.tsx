@@ -18,14 +18,22 @@ async function getWatermarkFlag(db: any) {
   }
 }
 
+function parseWm(v: string | undefined) {
+  const s = (v || "").trim();
+  if (s === "0") return false;
+  if (s === "1") return true;
+  return null;
+}
+
 export default async function PrintInterviewGuidePage({
   searchParams,
 }: {
-  searchParams: { guideId?: string; sig?: string; exp?: string };
+  searchParams: { guideId?: string; sig?: string; exp?: string; wm?: string };
 }) {
   const guideId = (searchParams.guideId || "").trim();
   const sig = (searchParams.sig || "").trim();
   const exp = mustInt(searchParams.exp || null);
+  const wmRequested = parseWm(searchParams.wm);
 
   if (!guideId || !sig || !exp) {
     return (
@@ -47,7 +55,9 @@ export default async function PrintInterviewGuidePage({
   }
 
   const db = getFirestore();
-  const wmEnabled = await getWatermarkFlag(db);
+  const configWmEnabled = await getWatermarkFlag(db);
+  const wmEnabled =
+    wmRequested === null ? configWmEnabled : wmRequested && configWmEnabled;
 
   const snap = await db.collection("interviewGuides").doc(guideId).get();
   if (!snap.exists) {

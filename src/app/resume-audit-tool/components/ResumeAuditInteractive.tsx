@@ -6,6 +6,12 @@ import { useRouter } from "next/navigation";
 import FileUploadZone from "./FileUploadZone";
 import LoadingState from "./LoadingState";
 import AuditResults from "./AuditResults";
+import { getFirebaseAuth } from "@/lib/firebaseClient";
+
+import UpgradeModal from "@/components/monetization/UpgradeModal";
+
+const [showUpgrade, setShowUpgrade] = useState(false);
+
 
 interface FormErrors {
   file: string;
@@ -58,6 +64,8 @@ export default function ResumeAuditInteractive() {
   const [auditResults, setAuditResults] = useState<AuditResultsData | null>(null);
   const [apiError, setApiError] = useState("");
 
+  const [isExporting, setIsExporting] = useState(false);
+
   useEffect(() => setIsHydrated(true), []);
 
   const auditId = useMemo(
@@ -84,7 +92,6 @@ export default function ResumeAuditInteractive() {
       if (!selectedFile) throw new Error("Resume file missing");
       formData.append("resumeFile", selectedFile);
 
-      // ✅ Audit stays lean: NO JD, NO target role, NO company, NO job type, NO region.
       const res = await fetch("/api/resume-audit", {
         method: "POST",
         body: formData,
@@ -109,9 +116,65 @@ export default function ResumeAuditInteractive() {
     router.push(`/ai-resume-builder?auditId=${encodeURIComponent(auditId)}`);
   };
 
-  const handleExportPDF = () => {
-    // keep existing behavior — we wire real exports in BLOCK 8 (below)
-    alert("PDF export will be enabled in the next phase.");
+  const handleExportPDF = async () => {
+    if (!auditId) {
+      setApiError("Audit ID missing");
+      return;
+    }
+
+    setIsExporting(true);
+    setApiError("");
+
+    try {
+      const auth = getFirebaseAuth();
+      const user = auth.currentUser;
+
+      if (!user) {
+        router.push("/sign-in");
+        return;
+      }
+
+      const token = await user.getIdToken();
+
+      const res = await fetch("/api/pdf-export", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          type: "resume",
+          id: auditId,
+        }),
+      });
+
+        if (res.status === 402) {
+        setShowUpgrade(true);
+        return;
+      }
+
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Export failed");
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "CareerMindAI-Resume.pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      window.URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setApiError(e?.message || "PDF export failed");
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const handleStartOver = () => {
@@ -125,7 +188,7 @@ export default function ResumeAuditInteractive() {
 
   return (
     <>
-      <LoadingState isVisible={isAnalyzing} />
+      <LoadingState isVisible={isAnalyzing || isExporting} />
 
       <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
         {apiError && (
@@ -141,6 +204,8 @@ export default function ResumeAuditInteractive() {
               selectedFile={selectedFile}
               error={errors.file}
             />
+            
+{showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} />} 
 
             <button
               onClick={handleAnalyze}
@@ -151,7 +216,6 @@ export default function ResumeAuditInteractive() {
           </div>
         ) : (
           <>
-            {/* ✅ CTA to Resume Builder */}
             <div className="bg-surface border border-border rounded-xl p-5 flex justify-between items-center">
               <div>
                 <div className="text-sm text-text-secondary">Next step</div>
