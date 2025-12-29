@@ -258,11 +258,11 @@ export default function AIResumeBuilderClient() {
         setPdfLoading(false);
         setPdfLine("");
       },
-      onError: (msg) => {
-        setPdfLoading(false);
-        setPdfLine("");
-        alert(msg);
-      },
+     onError: (msg) => {
+      setPdfLoading(false);
+      setPdfLine("");
+      setErr(msg); // show inline error
+  },
     });
   };
 

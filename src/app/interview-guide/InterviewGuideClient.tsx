@@ -90,8 +90,8 @@ export default function InterviewGuideClient() {
       onError: (msg) => {
         setPdfLoading(false);
         setPdfLine("");
-        alert(msg);
-      },
+        setErr(msg); // show inline error
+    },
     });
   };
 

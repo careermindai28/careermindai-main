@@ -9,23 +9,28 @@ export type DownloadPdfResult =
       status?: number;
     };
 
+type DownloadPdfOpts = {
+  onStart?: () => void;
+  onDone?: () => void;
+  onError?: (msg: string) => void;
+};
+
 export async function downloadPdf(
   type: PdfType,
-  id: string
+  id: string,
+  opts?: DownloadPdfOpts
 ): Promise<DownloadPdfResult> {
   try {
-    // ✅ Get Firebase ID token (client-side only)
+    opts?.onStart?.();
+
     const { getFirebaseAuth } = await import("@/lib/firebaseClient");
     const auth = getFirebaseAuth();
     const user = auth.currentUser;
 
     if (!user) {
-      return {
-        ok: false,
-        code: "UNAUTHORIZED",
-        message: "Please sign in to export PDFs.",
-        status: 401,
-      };
+      const msg = "Please sign in to export PDFs.";
+      opts?.onError?.(msg);
+      return { ok: false, code: "UNAUTHORIZED", message: msg, status: 401 };
     }
 
     const token = await user.getIdToken();
@@ -34,41 +39,31 @@ export async function downloadPdf(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`, // ✅ REQUIRED
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({ type, id }),
     });
 
     if (res.status === 402) {
       const data = await res.json().catch(() => null);
-      return {
-        ok: false,
-        code: "EXPORT_LIMIT_REACHED",
-        message:
-          data?.error ||
-          "Daily export limit reached. Upgrade to export unlimited PDFs.",
-        status: 402,
-      };
+      const msg =
+        data?.error || "Daily export limit reached. Upgrade to export unlimited PDFs.";
+      opts?.onError?.(msg);
+      return { ok: false, code: "EXPORT_LIMIT_REACHED", message: msg, status: 402 };
     }
 
-    if (res.status === 401) {
+    if (res.status === 401 || res.status === 403) {
       const data = await res.json().catch(() => null);
-      return {
-        ok: false,
-        code: "UNAUTHORIZED",
-        message: data?.error || "Unauthorized. Please sign in again.",
-        status: 401,
-      };
+      const msg = data?.error || "Unauthorized. Please sign in again.";
+      opts?.onError?.(msg);
+      return { ok: false, code: "UNAUTHORIZED", message: msg, status: res.status };
     }
 
     if (!res.ok) {
       const data = await res.json().catch(() => null);
-      return {
-        ok: false,
-        code: "FAILED",
-        message: data?.error || "PDF export failed.",
-        status: res.status,
-      };
+      const msg = data?.error || "PDF export failed.";
+      opts?.onError?.(msg);
+      return { ok: false, code: "FAILED", message: msg, status: res.status };
     }
 
     const blob = await res.blob();
@@ -76,6 +71,7 @@ export async function downloadPdf(
 
     const a = document.createElement("a");
     a.href = url;
+
     a.download =
       type === "resume"
         ? "CareerMindAI-Resume.pdf"
@@ -89,12 +85,11 @@ export async function downloadPdf(
 
     window.URL.revokeObjectURL(url);
 
+    opts?.onDone?.();
     return { ok: true };
   } catch (e: any) {
-    return {
-      ok: false,
-      code: "FAILED",
-      message: e?.message || "PDF export failed.",
-    };
+    const msg = e?.message || "PDF export failed.";
+    opts?.onError?.(msg);
+    return { ok: false, code: "FAILED", message: msg };
   }
 }
