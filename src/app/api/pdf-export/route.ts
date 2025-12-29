@@ -4,13 +4,13 @@ import puppeteer from "puppeteer-core";
 import path from "path";
 import { signPdfUrl } from "@/lib/pdfSign";
 
-import admin from "firebase-admin";
-import { getFirestore } from "firebase-admin/firestore";
+import { getAdminApp, getFirestore } from "@/lib/firebaseAdmin";
 import { getEntitlements } from "@/lib/entitlements";
 
 export const runtime = "nodejs";
 
 type PdfType = "resume" | "coverLetter" | "interviewGuide";
+type Plan = "FREE" | "PAID" | "ADMIN";
 
 function mustString(v: any) {
   return typeof v === "string" ? v.trim() : "";
@@ -29,42 +29,8 @@ function ymd(d = new Date()) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-// Lazy init Firebase Admin
-let adminApp: admin.app.App | null = null;
-
-function getAdminApp() {
-  if (adminApp) return adminApp;
-
-  const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID;
-
-
-  const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n");
-
-  if (!projectId || !clientEmail || !privateKey) {
-    throw new Error("Missing Firebase Admin credentials");
-  }
-
-  
-  adminApp = admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId,
-      clientEmail,
-      privateKey,
-    }),
-  });
-
-  return adminApp;
-}
-
-function getAdminDb() {
-  return getFirestore(getAdminApp());
-}
-
-type Plan = "FREE" | "PAID" | "ADMIN";
-
 async function getUserPlanAndUsage(uid: string) {
-  const db = getAdminDb();
+  const db = getFirestore();
   const ref = db.collection("users").doc(uid);
   const snap = await ref.get();
 
@@ -79,7 +45,7 @@ async function getUserPlanAndUsage(uid: string) {
   const exportsCount = Number(exports?.count || 0);
   const todaysCount = exportsDate === today ? exportsCount : 0;
 
-  return { db, ref, finalPlan, today, todaysCount };
+  return { ref, finalPlan, today, todaysCount };
 }
 
 export async function POST(req: NextRequest) {
@@ -99,8 +65,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify Firebase ID token
-let uid = "";
-let email: string | null = null;
+    let uid = "";
+    let email: string | null = null;
 
     try {
       const adm = getAdminApp();
@@ -108,16 +74,15 @@ let email: string | null = null;
       uid = decoded.uid;
       email = typeof (decoded as any).email === "string" ? (decoded as any).email : null;
     } catch (err: any) {
-    return new Response(
-    JSON.stringify({
-      ok: false,
-      error: "Unauthorized (invalid session). Please sign out and sign in again.",
-      detail: err?.code || err?.message || "verifyIdToken_failed",
-    }),
-    { status: 401, headers: { "Content-Type": "application/json" } }
-    );
-  }
-
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: "Unauthorized (invalid session). Please sign out and sign in again.",
+          detail: err?.code || err?.message || "verifyIdToken_failed",
+        }),
+        { status: 401, headers: { "Content-Type": "application/json" } }
+      );
+    }
 
     if (!type || !id) {
       return new Response(JSON.stringify({ ok: false, error: "Missing type or id" }), {
@@ -134,7 +99,7 @@ let email: string | null = null;
       });
     }
 
-    // ✅ Monetization rules (with whitelist)
+    // ✅ Monetization rules
     const { ref, finalPlan, today, todaysCount } = await getUserPlanAndUsage(uid);
     const ent = getEntitlements(finalPlan, email);
 
@@ -160,11 +125,17 @@ let email: string | null = null;
 
     let printUrl = "";
     if (type === "resume") {
-      printUrl = `${baseUrl}/print/resume?builderId=${encodeURIComponent(id)}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
+      printUrl = `${baseUrl}/print/resume?builderId=${encodeURIComponent(
+        id
+      )}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
     } else if (type === "coverLetter") {
-      printUrl = `${baseUrl}/print/cover-letter?coverLetterId=${encodeURIComponent(id)}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
+      printUrl = `${baseUrl}/print/cover-letter?coverLetterId=${encodeURIComponent(
+        id
+      )}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
     } else if (type === "interviewGuide") {
-      printUrl = `${baseUrl}/print/interview-guide?guideId=${encodeURIComponent(id)}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
+      printUrl = `${baseUrl}/print/interview-guide?guideId=${encodeURIComponent(
+        id
+      )}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
     } else {
       return new Response(JSON.stringify({ ok: false, error: "Invalid type" }), {
         status: 400,
@@ -210,14 +181,9 @@ let email: string | null = null;
       await browser.close();
     }
   } catch (err: any) {
-  return new Response(
-    JSON.stringify({
-      ok: false,
-      error: "Unauthorized",
-      detail: err?.code || err?.message || "verifyIdToken_failed",
-    }),
-    { status: 401, headers: { "Content-Type": "application/json" } }
-  );
-}
-
+    return new Response(
+      JSON.stringify({ ok: false, error: err?.message || "PDF export failed." }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
+  }
 }
