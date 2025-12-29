@@ -1,5 +1,6 @@
 type PdfType = "resume" | "coverLetter" | "interviewGuide";
 
+
 export type DownloadPdfResult =
   | { ok: true }
   | {
@@ -33,7 +34,7 @@ export async function downloadPdf(
       return { ok: false, code: "UNAUTHORIZED", message: msg, status: 401 };
     }
 
-    const token = await user.getIdToken();
+    const token = await user.getIdToken(true);
 
     const res = await fetch("/api/pdf-export", {
       method: "POST",

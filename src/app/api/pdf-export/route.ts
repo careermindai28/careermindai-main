@@ -98,20 +98,25 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify Firebase ID token
-    let uid = "";
-    let email: string | null = null;
+let uid = "";
+let email: string | null = null;
 
     try {
       const adm = getAdminApp();
       const decoded = await adm.auth().verifyIdToken(token);
       uid = decoded.uid;
       email = typeof (decoded as any).email === "string" ? (decoded as any).email : null;
-    } catch {
-      return new Response(JSON.stringify({ ok: false, error: "Unauthorized" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
+    } catch (err: any) {
+    return new Response(
+    JSON.stringify({
+      ok: false,
+      error: "Unauthorized (invalid session). Please sign out and sign in again.",
+      detail: err?.code || err?.message || "verifyIdToken_failed",
+    }),
+    { status: 401, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
 
     if (!type || !id) {
       return new Response(JSON.stringify({ ok: false, error: "Missing type or id" }), {
