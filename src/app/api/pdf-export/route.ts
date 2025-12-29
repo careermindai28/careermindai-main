@@ -35,8 +35,8 @@ let adminApp: admin.app.App | null = null;
 function getAdminApp() {
   if (adminApp) return adminApp;
 
-  const projectId =
-    process.env.FIREBASE_ADMIN_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+  const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID;
+
 
   const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
   const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n");
@@ -45,6 +45,7 @@ function getAdminApp() {
     throw new Error("Missing Firebase Admin credentials");
   }
 
+  
   adminApp = admin.initializeApp({
     credential: admin.credential.cert({
       projectId,
