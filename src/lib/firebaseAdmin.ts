@@ -30,6 +30,13 @@ export function getAdminApp() {
 
   const privateKey = getPrivateKey();
 
+  console.log("ADMIN_ENV_CHECK", {
+  hasProjectId: Boolean(projectId),
+  hasClientEmail: Boolean(clientEmail),
+  hasPrivateKey: Boolean(privateKey),
+});
+
+
   // Optional but recommended if you use Storage
   const storageBucket =
     process.env.FIREBASE_STORAGE_BUCKET ||

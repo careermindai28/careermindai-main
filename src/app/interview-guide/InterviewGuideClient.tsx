@@ -226,10 +226,7 @@ export default function InterviewGuideClient() {
           </div>
 
           <div className="bg-surface border border-border rounded-xl p-6">
-            <h2 className="text-lg font-semibold text-foreground mb-2">Raw JSON (debug)</h2>
-            <pre className="text-xs overflow-auto p-4 rounded-lg bg-background border border-border whitespace-pre-wrap break-words">
-              {JSON.stringify(content, null, 2)}
-            </pre>
+            
           </div>
         </>
       )}
