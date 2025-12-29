@@ -208,10 +208,15 @@ let email: string | null = null;
     } finally {
       await browser.close();
     }
-  } catch (e: any) {
-    return new Response(JSON.stringify({ ok: false, error: e?.message || "PDF export failed" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+  } catch (err: any) {
+  return new Response(
+    JSON.stringify({
+      ok: false,
+      error: "Unauthorized",
+      detail: err?.code || err?.message || "verifyIdToken_failed",
+    }),
+    { status: 401, headers: { "Content-Type": "application/json" } }
+  );
+}
+
 }
