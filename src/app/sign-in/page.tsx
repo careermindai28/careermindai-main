@@ -1,29 +1,40 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { getFirebaseAuth, isFirebaseReady } from '@/lib/firebaseClient';
 
+function safeNext(next: string | null) {
+  // prevent open redirects
+  if (!next) return null;
+  if (!next.startsWith('/')) return null;
+  if (next.startsWith('//')) return null;
+  return next;
+}
+
 export default function SignInPage() {
   const router = useRouter();
+  const params = useSearchParams();
+
   const { user, loading, firebaseReady } = useAuth();
 
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [accepted, setAccepted] = useState(true); // keep default true to reduce friction; change if you want strict checkbox
+  const [accepted, setAccepted] = useState(true);
 
-  // If already logged in, go straight to dashboard
+  const nextParam = safeNext(params.get('next'));
+  const targetAfterLogin = nextParam || '/user-dashboard';
+
+  // If already logged in, go to next (or dashboard)
   useEffect(() => {
-    if (!loading && user) router.replace('/user-dashboard');
-  }, [loading, user, router]);
+    if (!loading && user) router.replace(targetAfterLogin);
+  }, [loading, user, router, targetAfterLogin]);
 
   const handleGoogleSignIn = async () => {
     setErr(null);
 
-    // Extra safety: your provider already computes firebaseReady,
-    // but we also hard-check in case the environment vars are missing.
     const ready = firebaseReady ?? isFirebaseReady();
     if (!ready) {
       setErr('Firebase is not configured. Please check your environment variables.');
@@ -39,13 +50,12 @@ export default function SignInPage() {
     try {
       const auth = getFirebaseAuth();
       const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: 'select_account' }); // IMPORTANT: lets you pick Gmail even if another is logged in
+      provider.setCustomParameters({ prompt: 'select_account' });
 
       await signInWithPopup(auth, provider);
 
-      // AuthProvider listener will pick up user and redirect automatically,
-      // but we also redirect for instant UX.
-      router.replace('/user-dashboard');
+      // Redirect immediately for UX
+      router.replace(targetAfterLogin);
     } catch (e: any) {
       console.error('Google sign-in error:', e);
       setErr(e?.message || 'Sign-in failed. Please try again.');
@@ -54,7 +64,6 @@ export default function SignInPage() {
     }
   };
 
-  // While auth is still initializing, don’t flash wrong state
   if (loading) {
     return (
       <main className="min-h-screen flex items-center justify-center px-4">
@@ -63,16 +72,13 @@ export default function SignInPage() {
     );
   }
 
-  // If already logged in, we’ll redirect; keep UI minimal
   if (user) return null;
 
   return (
     <main className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-md bg-surface border border-border rounded-2xl p-6 shadow-card">
         <h1 className="text-2xl font-semibold text-foreground">Sign in to CareerMindAI</h1>
-        <p className="mt-2 text-text-secondary">
-          Continue with Google to access your dashboard and tools.
-        </p>
+        <p className="mt-2 text-text-secondary">Continue with Google to access your dashboard and tools.</p>
 
         <button
           onClick={handleGoogleSignIn}

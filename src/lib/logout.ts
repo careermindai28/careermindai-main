@@ -3,8 +3,11 @@ import { getFirebaseAuth } from '@/lib/firebaseClient';
 
 export async function logoutUser() {
   const auth = getFirebaseAuth();
-  await signOut(auth);
 
-  // Hard redirect to fully reset client state
-  window.location.href = '/sign-in';
+  try {
+    await signOut(auth);
+  } finally {
+    // Hard redirect resets all client state + avoids stale "logged-in" UI
+    window.location.href = '/landing-page';
+  }
 }

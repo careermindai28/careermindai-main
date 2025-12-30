@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import Icon from '@/components/ui/AppIcon';
 import { useAuth } from '@/components/providers/AuthProvider';
 
@@ -9,30 +10,55 @@ interface PublicHeaderProps {
   className?: string;
 }
 
+function withNext(signInPath: string, nextPath: string) {
+  const params = new URLSearchParams();
+  params.set('next', nextPath);
+  return `${signInPath}?${params.toString()}`;
+}
+
 const PublicHeader = ({ className = '' }: PublicHeaderProps) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { user, loading } = useAuth();
+  const pathname = usePathname() || '/landing-page';
 
-  // ✅ use loading as well (your AuthProvider already exposes it)
-  const { user, loading } = useAuth(); // AuthProvider provides loading :contentReference[oaicite:6]{index=6}
+  const ROUTES = useMemo(
+    () => ({
+      landing: '/landing-page',
+      pricing: '/pricing-plans',
+      freeTools: '/free-tools-hub',
+      signIn: '/sign-in',
+      dashboard: '/user-dashboard',
+      audit: '/resume-audit-tool',
+    }),
+    []
+  );
 
   const navigationItems = [
-    { label: 'Home', path: '/landing-page' },
-    { label: 'Pricing', path: '/pricing-plans' },
-    { label: 'Free Tools', path: '/free-tools-hub' },
+    { label: 'Home', path: ROUTES.landing },
+    { label: 'Pricing', path: ROUTES.pricing },
+    { label: 'Free Tools', path: ROUTES.freeTools },
   ];
 
-  // ✅ Real dashboard route in your repo
-  const DASHBOARD_PATH = '/user-dashboard'; // exists :contentReference[oaicite:7]{index=7}
+  // Primary CTA:
+  // - logged in  -> dashboard
+  // - logged out -> sign-in then resume-audit-tool
+  const primaryCtaHref = loading
+    ? ROUTES.signIn
+    : user
+    ? ROUTES.dashboard
+    : withNext(ROUTES.signIn, ROUTES.audit);
 
-  // ✅ Since you DO NOT have /login route, your "login" is currently the Google section on landing page.
-  const LOGIN_ENTRY = '/sign-in'; // GoogleAuthSection lives on landing page :contentReference[oaicite:8]{index=8}
-
-  // ✅ Never send user to dashboard while loading auth state
-  const primaryCtaHref = loading ? LOGIN_ENTRY : user ? '/user-dashboard' : LOGIN_ENTRY;
   const primaryCtaLabel = loading ? 'Loading…' : user ? 'Go to Dashboard' : 'Get Started';
 
-  // ✅ Keep "Login" meaningful: it should take you to the Google auth section, not dashboard
-  const secondaryCtaHref = loading ? LOGIN_ENTRY : user ? '/user-dashboard' : LOGIN_ENTRY;
+  // Secondary CTA:
+  // - logged in  -> dashboard
+  // - logged out -> sign-in then return to current page
+  const secondaryCtaHref = loading
+    ? ROUTES.signIn
+    : user
+    ? ROUTES.dashboard
+    : withNext(ROUTES.signIn, pathname);
+
   const secondaryCtaLabel = loading ? 'Login' : user ? 'Dashboard' : 'Login';
 
   const toggleMobileMenu = () => setIsMobileMenuOpen((v) => !v);
@@ -42,7 +68,7 @@ const PublicHeader = ({ className = '' }: PublicHeaderProps) => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center">
-            <Link href="/landing-page" className="flex items-center space-x-2">
+            <Link href={ROUTES.landing} className="flex items-center space-x-2">
               <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-primary">
                 <rect width="32" height="32" rx="6" fill="currentColor" />
                 <path d="M16 8L8 14V24H12V18H20V24H24V14L16 8Z" fill="white" />
