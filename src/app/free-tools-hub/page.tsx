@@ -1,6 +1,6 @@
 'use client';
 
-import PublicHeader from '@/components/common/PublicHeader';
+//import PublicHeader from '@/components/common/PublicHeader';
 import Breadcrumb from '@/components/common/Breadcrumb';
 import ToolsHero from './components/ToolsHero';
 import ResumeWordCounter from './components/ResumeWordCounter';
@@ -11,7 +11,7 @@ import SocialShare from './components/SocialShare';
 export default function FreeToolsHubPage() {
   return (
     <div className="min-h-screen bg-background">
-      <PublicHeader />
+     
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
         <Breadcrumb />
