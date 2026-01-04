@@ -1,11 +1,12 @@
-import { Suspense } from 'react';
-import SignInClient from './SignInClient';
+// src/app/sign-in/page.tsx
+import { Suspense } from "react";
+import SignInClient from "./SignInClient";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-export default function Page() {
+export default function SignInPage() {
   return (
-    <Suspense fallback={<div className="min-h-[40vh] flex items-center justify-center text-text-secondary">Loading…</div>}>
+    <Suspense fallback={<div className="p-8 text-sm text-muted-foreground">Loading…</div>}>
       <SignInClient />
     </Suspense>
   );

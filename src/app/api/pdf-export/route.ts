@@ -1,10 +1,11 @@
+// src/app/api/pdf-export/route.ts
 import { NextRequest } from "next/server";
 import chromium from "@sparticuz/chromium";
 import puppeteer from "puppeteer-core";
 import path from "path";
 import { signPdfUrl } from "@/lib/pdfSign";
 
-import { getAdminApp, getFirestore } from "@/lib/firebaseAdmin";
+import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
 import { getEntitlements } from "@/lib/entitlements";
 
 export const runtime = "nodejs";
@@ -30,7 +31,7 @@ function ymd(d = new Date()) {
 }
 
 async function getUserPlanAndUsage(uid: string) {
-  const db = getFirestore();
+  const db = getAdminDb();
   const ref = db.collection("users").doc(uid);
   const snap = await ref.get();
 
@@ -69,8 +70,7 @@ export async function POST(req: NextRequest) {
     let email: string | null = null;
 
     try {
-      const adm = getAdminApp();
-      const decoded = await adm.auth().verifyIdToken(token);
+      const decoded = await getAdminAuth().verifyIdToken(token);
       uid = decoded.uid;
       email = typeof (decoded as any).email === "string" ? (decoded as any).email : null;
     } catch (err: any) {
@@ -125,17 +125,11 @@ export async function POST(req: NextRequest) {
 
     let printUrl = "";
     if (type === "resume") {
-      printUrl = `${baseUrl}/print/resume?builderId=${encodeURIComponent(
-        id
-      )}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
+      printUrl = `${baseUrl}/print/resume?builderId=${encodeURIComponent(id)}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
     } else if (type === "coverLetter") {
-      printUrl = `${baseUrl}/print/cover-letter?coverLetterId=${encodeURIComponent(
-        id
-      )}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
+      printUrl = `${baseUrl}/print/cover-letter?coverLetterId=${encodeURIComponent(id)}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
     } else if (type === "interviewGuide") {
-      printUrl = `${baseUrl}/print/interview-guide?guideId=${encodeURIComponent(
-        id
-      )}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
+      printUrl = `${baseUrl}/print/interview-guide?guideId=${encodeURIComponent(id)}&wm=${wm}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
     } else {
       return new Response(JSON.stringify({ ok: false, error: "Invalid type" }), {
         status: 400,

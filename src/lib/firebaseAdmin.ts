@@ -1,72 +1,32 @@
-import "server-only";
-import admin from "firebase-admin";
+// src/lib/firebaseAdmin.ts
+import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
+import { getAuth, type Auth } from "firebase-admin/auth";
+import { getFirestore, type Firestore } from "firebase-admin/firestore";
 
-function pickEnv(nameA: string, nameB: string) {
-  const a = process.env[nameA];
-  if (a && a.trim().length) return a;
-  const b = process.env[nameB];
-  if (b && b.trim().length) return b;
-  return undefined;
+function requireEnv(name: string) {
+  const v = process.env[name];
+  if (!v) throw new Error(`Missing Firebase Admin env vars. Set ${name}.`);
+  return v;
 }
 
-function getPrivateKey(): string | undefined {
-  const key =
-    pickEnv("FIREBASE_ADMIN_PRIVATE_KEY", "FIREBASE_PRIVATE_KEY") ||
-    undefined;
-  if (!key) return undefined;
-  // Vercel often stores newlines as \n
-  return key.replace(/\\n/g, "\n");
-}
+export function getAdminApp(): App {
+  if (getApps().length) return getApps()[0]!;
 
-export function getAdminApp() {
-  if (admin.apps.length) return admin.app();
+  const projectId = requireEnv("FIREBASE_PROJECT_ID");
+  const clientEmail = requireEnv("FIREBASE_CLIENT_EMAIL");
+  const privateKey = requireEnv("FIREBASE_PRIVATE_KEY").replace(/\\n/g, "\n");
 
-  // ✅ Support BOTH new + legacy env var names (so we don't break anything)
-  const projectId =
-    pickEnv("FIREBASE_ADMIN_PROJECT_ID", "FIREBASE_PROJECT_ID") || undefined;
-
-  const clientEmail =
-    pickEnv("FIREBASE_ADMIN_CLIENT_EMAIL", "FIREBASE_CLIENT_EMAIL") || undefined;
-
-  const privateKey = getPrivateKey();
-
-  console.log("ADMIN_ENV_CHECK", {
-  hasProjectId: Boolean(projectId),
-  hasClientEmail: Boolean(clientEmail),
-  hasPrivateKey: Boolean(privateKey),
-});
-
-
-  // Optional but recommended if you use Storage
-  const storageBucket =
-    process.env.FIREBASE_STORAGE_BUCKET ||
-    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
-
-  if (!projectId || !clientEmail || !privateKey) {
-    throw new Error(
-      "Missing Firebase Admin env vars. Set FIREBASE_ADMIN_PROJECT_ID, FIREBASE_ADMIN_CLIENT_EMAIL, FIREBASE_ADMIN_PRIVATE_KEY (preferred). " +
-        "Legacy also supported: FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY."
-    );
-  }
-
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId,
-      clientEmail,
-      privateKey,
-    }),
-    ...(storageBucket ? { storageBucket } : {}),
+  return initializeApp({
+    credential: cert({ projectId, clientEmail, privateKey }),
   });
-
-  return admin.app();
 }
 
-export function getFirestore() {
-  getAdminApp();
-  return admin.firestore();
+export function getAdminAuth(): Auth {
+  const app = getAdminApp();
+  return getAuth(app);
 }
 
-export function getStorageBucket() {
-  getAdminApp();
-  return admin.storage().bucket();
+export function getAdminDb(): Firestore {
+  const app = getAdminApp();
+  return getFirestore(app);
 }

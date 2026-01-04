@@ -1,6 +1,5 @@
 type PdfType = "resume" | "coverLetter" | "interviewGuide";
 
-
 export type DownloadPdfResult =
   | { ok: true }
   | {
@@ -14,6 +13,8 @@ type DownloadPdfOpts = {
   onStart?: () => void;
   onDone?: () => void;
   onError?: (msg: string) => void;
+  onLimit?: (msg: string) => void; // ✅ NEW: trigger upgrade modal
+  onUnauthorized?: (msg: string) => void; // ✅ optional
 };
 
 export async function downloadPdf(
@@ -30,6 +31,7 @@ export async function downloadPdf(
 
     if (!user) {
       const msg = "Please sign in to export PDFs.";
+      opts?.onUnauthorized?.(msg);
       opts?.onError?.(msg);
       return { ok: false, code: "UNAUTHORIZED", message: msg, status: 401 };
     }
@@ -49,13 +51,15 @@ export async function downloadPdf(
       const data = await res.json().catch(() => null);
       const msg =
         data?.error || "Daily export limit reached. Upgrade to export unlimited PDFs.";
-      opts?.onError?.(msg);
+      opts?.onLimit?.(msg);   // ✅ open upgrade modal
+      opts?.onError?.(msg);   // ✅ still show inline message if you want
       return { ok: false, code: "EXPORT_LIMIT_REACHED", message: msg, status: 402 };
     }
 
     if (res.status === 401 || res.status === 403) {
       const data = await res.json().catch(() => null);
       const msg = data?.error || "Unauthorized. Please sign in again.";
+      opts?.onUnauthorized?.(msg);
       opts?.onError?.(msg);
       return { ok: false, code: "UNAUTHORIZED", message: msg, status: res.status };
     }
@@ -72,7 +76,6 @@ export async function downloadPdf(
 
     const a = document.createElement("a");
     a.href = url;
-
     a.download =
       type === "resume"
         ? "CareerMindAI-Resume.pdf"
